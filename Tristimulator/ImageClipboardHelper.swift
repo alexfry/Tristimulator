@@ -12,6 +12,14 @@ import CoreGraphics
 import CoreImage
 import ImageIO
 
+/// Result of File > Export Gain Map Image.
+enum GainMapExportOutcome: Equatable {
+    case saved
+    /// Saved as an ISO 21496-1 gain-map JPEG, but the UltraHDR XMP couldn't be added.
+    case savedWithoutUltraHDR(reason: String)
+    case failed
+}
+
 enum ImageClipboardHelper {
 
     // MARK: - Public: Clipboard (Gain Map)
@@ -113,19 +121,19 @@ enum ImageClipboardHelper {
         sdrProcessor: OCIOGPUProcessor? = nil,
         sdrColorSpace: CGColorSpace? = nil,
         ultraHDRCompatible: Bool = false
-    ) async -> Bool {
+    ) async -> GainMapExportOutcome {
         guard let hdrTexture = await gpuProcessor.processTexture(
             input: sourceTexture, exposure: exposure, channelMask: channelMask
         ) else {
             print("❌ Export: OCIO HDR transform failed")
-            return false
+            return .failed
         }
 
         guard let hdrImage = readbackAsCGImage(
             texture: hdrTexture, device: device, colorSpace: colorSpace
         ) else {
             print("❌ Export: HDR CGImage creation failed")
-            return false
+            return .failed
         }
 
         var sdrImage: CGImage?
@@ -290,7 +298,7 @@ enum ImageClipboardHelper {
         hdrImage: CGImage, hdrColorSpace: CGColorSpace,
         sdrImage: CGImage?, url: URL,
         ultraHDRCompatible: Bool = false
-    ) -> Bool {
+    ) -> GainMapExportOutcome {
         let context = CIContext()
         let isJPEG = url.pathExtension.lowercased() == "jpg"
             || url.pathExtension.lowercased() == "jpeg"
@@ -299,7 +307,7 @@ enum ImageClipboardHelper {
                 buildGainMapImages(hdrCGImage: hdrImage, hdrColorSpace: hdrColorSpace,
                                    sdrCGImage: sdrImage, context: context) else {
             print("❌ Export: gain map image build failed")
-            return false
+            return .failed
         }
 
         let options: [CIImageRepresentationOption: Any] = [
@@ -316,295 +324,34 @@ enum ImageClipboardHelper {
 
         guard var imageData = data else {
             print("❌ Export: \(isJPEG ? "JPEG" : "HEIC") representation failed")
-            return false
+            return .failed
         }
 
+        // UltraHDR (Google/Adobe hdrgm XMP) applies to JPEG only. If it can't be added, the
+        // file is still a valid ISO 21496-1 gain-map JPEG, so save it and report the reason.
+        var ultraHDRProblem: String?
         if isJPEG && ultraHDRCompatible {
-            imageData = injectUltraHDRMetadata(into: imageData)
+            do {
+                let result = try UltraHDRMetadata.inject(into: imageData)
+                imageData = result.data
+                print("✅ UltraHDR: \(result.injected ? "added hdrgm XMP" : "already present") from \(result.source.rawValue) "
+                      + "(capacity \(result.params.hdrCapacityMin)…\(result.params.hdrCapacityMax) log2, "
+                      + "\(result.params.channels.count) channel(s))")
+            } catch {
+                ultraHDRProblem = "\(error)"
+                print("❌ UltraHDR: couldn't add UltraHDR metadata: \(error)")
+            }
         }
 
         do {
             try imageData.write(to: url)
             let fmt = isJPEG ? "JPEG" : "HEIC"
             print("✅ Export: \(fmt) gain map (\(imageData.count) bytes, headroom \(headroom)) → \(url.path)")
-            return true
+            return ultraHDRProblem.map { .savedWithoutUltraHDR(reason: $0) } ?? .saved
         } catch {
             print("❌ Export: file write error: \(error)")
-            return false
+            return .failed
         }
-    }
-
-    // MARK: - UltraHDR Compatibility
-
-    private struct GainMapChannelParams {
-        var gainMapMin: Float
-        var gainMapMax: Float
-        var gamma: Float
-        var offsetSDR: Float
-        var offsetHDR: Float
-    }
-
-    private struct GainMapXMPParams {
-        var baseRenditionIsHDR: Bool = false
-        var baseHeadroom: Float = 0.0
-        var alternateHeadroom: Float = 0.0
-        var channels: [GainMapChannelParams] = []
-    }
-
-    private static func injectUltraHDRMetadata(into jpegData: Data) -> Data {
-        guard let params = parseGainMapParamsFromJPEG(jpegData) else {
-            print("⚠️ UltraHDR: could not parse HDRToneMap XMP, skipping injection")
-            return jpegData
-        }
-
-        guard let secondaryStart = findSecondaryImageStart(in: jpegData) else {
-            print("⚠️ UltraHDR: could not find secondary image, skipping injection")
-            return jpegData
-        }
-
-        guard let primaryExifEnd = findExifAPP1End(in: jpegData) else {
-            print("⚠️ UltraHDR: could not find Exif APP1 end, skipping injection")
-            return jpegData
-        }
-
-        // Step 1: Build the gain map params XMP and inject into secondary image
-        let gainmapXMP = buildGainMapParamsXMP(params: params)
-        let gainmapSegment = buildXMPAPP1Segment(gainmapXMP)
-
-        // Find insertion point in secondary: right after its SOI (before existing APP1)
-        let secondaryInsertOffset = secondaryStart + 2
-        let secondaryOriginalLength = jpegData.count - secondaryStart
-        let newSecondaryLength = secondaryOriginalLength + gainmapSegment.count
-
-        // Step 2: Build the primary Container:Directory XMP
-        let containerXMP = buildContainerDirectoryXMP(gainMapLength: newSecondaryLength)
-        let containerSegment = buildXMPAPP1Segment(containerXMP)
-
-        guard containerSegment.count <= 0xFFFF + 2, gainmapSegment.count <= 0xFFFF + 2 else {
-            print("⚠️ UltraHDR: XMP segment too large, skipping injection")
-            return jpegData
-        }
-
-        // Step 3: Assemble the file.
-        // Insert containerSegment into primary (after Exif, before MPF).
-        // Insert gainmapSegment into secondary (after SOI, before existing segments).
-        // Inserting before MPF means MPF-relative offsets stay valid.
-        var result = Data(capacity: jpegData.count + containerSegment.count + gainmapSegment.count)
-
-        // Primary: SOI through Exif APP1
-        result.append(jpegData[0..<primaryExifEnd])
-        // Primary: injected Container:Directory XMP
-        result.append(containerSegment)
-        // Primary: rest of primary (MPF, ICC, DQT ... EOI)
-        result.append(jpegData[primaryExifEnd..<secondaryStart])
-        // Secondary: SOI
-        result.append(jpegData[secondaryStart..<secondaryInsertOffset])
-        // Secondary: injected hdrgm: gain map params XMP
-        result.append(gainmapSegment)
-        // Secondary: rest of secondary (existing XMP, ICC, image data ... EOI)
-        result.append(jpegData[secondaryInsertOffset...])
-
-        print("✅ UltraHDR: injected Container:Directory (\(containerSegment.count)B) + hdrgm params (\(gainmapSegment.count)B)")
-        return result
-    }
-
-    private static func buildXMPAPP1Segment(_ xmpString: String) -> Data {
-        let xmpBytes = Array(xmpString.utf8)
-        let identifier: [UInt8] = Array("http://ns.adobe.com/xap/1.0/".utf8) + [0x00]
-        let segmentLength = 2 + identifier.count + xmpBytes.count
-
-        var segment = Data()
-        segment.append(contentsOf: [0xFF, 0xE1])
-        segment.append(UInt8((segmentLength >> 8) & 0xFF))
-        segment.append(UInt8(segmentLength & 0xFF))
-        segment.append(contentsOf: identifier)
-        segment.append(contentsOf: xmpBytes)
-        return segment
-    }
-
-    private static func findExifAPP1End(in data: Data) -> Int? {
-        var offset = 2 // skip SOI
-
-        while offset + 3 < data.count {
-            guard data[offset] == 0xFF else { return nil }
-            let marker = data[offset + 1]
-            let length = Int(data[offset + 2]) << 8 | Int(data[offset + 3])
-
-            if marker == 0xE1 {
-                let payloadStart = offset + 4
-                if payloadStart + 4 < data.count,
-                   data[payloadStart] == 0x45, // E
-                   data[payloadStart + 1] == 0x78, // x
-                   data[payloadStart + 2] == 0x69, // i
-                   data[payloadStart + 3] == 0x66 // f
-                {
-                    return offset + 2 + length
-                }
-            }
-
-            offset += 2 + length
-        }
-
-        return nil
-    }
-
-    private static func parseGainMapParamsFromJPEG(_ data: Data) -> GainMapXMPParams? {
-        guard let secondaryStart = findSecondaryImageStart(in: data) else { return nil }
-        guard let xmpRange = findXMPRange(in: data, from: secondaryStart) else { return nil }
-        guard let xmpString = String(data: data[xmpRange], encoding: .utf8) else { return nil }
-        return parseHDRToneMapXMP(xmpString)
-    }
-
-    private static func findSecondaryImageStart(in data: Data) -> Int? {
-        // Find EOI (FF D9) of primary, then SOI (FF D8) of secondary.
-        // In compressed data FF is always followed by 00 (stuffing), so FF D9 is unambiguous.
-        for i in 2..<(data.count - 3) {
-            if data[i] == 0xFF && data[i + 1] == 0xD9
-                && data[i + 2] == 0xFF && data[i + 3] == 0xD8 {
-                return i + 2
-            }
-        }
-        return nil
-    }
-
-    private static func findXMPRange(in data: Data, from start: Int) -> Range<Int>? {
-        let xmpIdent = Array("http://ns.adobe.com/xap/1.0/".utf8) + [0x00]
-        var offset = start + 2 // skip SOI
-
-        while offset + 3 < data.count {
-            guard data[offset] == 0xFF else { break }
-            let marker = data[offset + 1]
-
-            if marker == 0xDA || marker == 0xD9 { break }
-
-            let length = Int(data[offset + 2]) << 8 | Int(data[offset + 3])
-            let segmentEnd = offset + 2 + length
-
-            if marker == 0xE1 {
-                let payloadStart = offset + 4
-                if payloadStart + xmpIdent.count <= data.count {
-                    let slice = Array(data[payloadStart..<(payloadStart + xmpIdent.count)])
-                    if slice == xmpIdent {
-                        let xmpStart = payloadStart + xmpIdent.count
-                        return xmpStart..<segmentEnd
-                    }
-                }
-            }
-
-            offset = segmentEnd
-        }
-
-        return nil
-    }
-
-    private static func parseHDRToneMapXMP(_ xmp: String) -> GainMapXMPParams? {
-        var params = GainMapXMPParams()
-
-        if let val = extractXMLElementValue(from: xmp, tag: "HDRToneMap:BaseRenditionIsHDR") {
-            params.baseRenditionIsHDR = val == "1"
-        }
-        if let val = extractXMLElementValue(from: xmp, tag: "HDRToneMap:BaseHeadroom") {
-            params.baseHeadroom = Float(val) ?? 0.0
-        }
-        if let val = extractXMLElementValue(from: xmp, tag: "HDRToneMap:AlternateHeadroom") {
-            params.alternateHeadroom = Float(val) ?? 0.0
-        }
-
-        let gainMapMins = extractAllXMLElementValues(from: xmp, tag: "HDRToneMap:GainMapMin")
-        let gainMapMaxs = extractAllXMLElementValues(from: xmp, tag: "HDRToneMap:GainMapMax")
-        let gammas = extractAllXMLElementValues(from: xmp, tag: "HDRToneMap:Gamma")
-        let offsetSDRs = extractAllXMLElementValues(from: xmp, tag: "HDRToneMap:OffsetSDR")
-        let offsetHDRs = extractAllXMLElementValues(from: xmp, tag: "HDRToneMap:OffsetHDR")
-
-        guard !gainMapMins.isEmpty else { return nil }
-
-        for i in 0..<gainMapMins.count {
-            params.channels.append(GainMapChannelParams(
-                gainMapMin: Float(gainMapMins[i]) ?? 0,
-                gainMapMax: Float(i < gainMapMaxs.count ? gainMapMaxs[i] : "0") ?? 0,
-                gamma: Float(i < gammas.count ? gammas[i] : "1") ?? 1,
-                offsetSDR: Float(i < offsetSDRs.count ? offsetSDRs[i] : "0") ?? 0,
-                offsetHDR: Float(i < offsetHDRs.count ? offsetHDRs[i] : "0") ?? 0
-            ))
-        }
-
-        return params
-    }
-
-    private static func extractXMLElementValue(from xml: String, tag: String) -> String? {
-        guard let start = xml.range(of: "<\(tag)>"),
-              let end = xml.range(of: "</\(tag)>", range: start.upperBound..<xml.endIndex)
-        else { return nil }
-        return String(xml[start.upperBound..<end.lowerBound])
-    }
-
-    private static func extractAllXMLElementValues(from xml: String, tag: String) -> [String] {
-        var results: [String] = []
-        var searchStart = xml.startIndex
-        while let start = xml.range(of: "<\(tag)>", range: searchStart..<xml.endIndex),
-              let end = xml.range(of: "</\(tag)>", range: start.upperBound..<xml.endIndex) {
-            results.append(String(xml[start.upperBound..<end.lowerBound]))
-            searchStart = end.upperBound
-        }
-        return results
-    }
-
-    private static func buildContainerDirectoryXMP(gainMapLength: Int) -> String {
-        return """
-        <x:xmpmeta xmlns:x="adobe:ns:meta/">
-         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-          <rdf:Description rdf:about=""
-           xmlns:hdrgm="http://ns.adobe.com/hdr-gain-map/1.0/"
-           xmlns:Container="http://ns.google.com/photos/1.0/container/"
-           xmlns:Item="http://ns.google.com/photos/1.0/container/item/"
-           hdrgm:Version="1.0">
-           <Container:Directory>
-            <rdf:Seq>
-             <rdf:li rdf:parseType="Resource">
-              <Container:Item Item:Semantic="Primary" Item:Mime="image/jpeg"/>
-             </rdf:li>
-             <rdf:li rdf:parseType="Resource">
-              <Container:Item Item:Semantic="GainMap" Item:Mime="image/jpeg" Item:Length="\(gainMapLength)"/>
-             </rdf:li>
-            </rdf:Seq>
-           </Container:Directory>
-          </rdf:Description>
-         </rdf:RDF>
-        </x:xmpmeta>
-        """
-    }
-
-    private static func buildGainMapParamsXMP(params: GainMapXMPParams) -> String {
-        let channels = params.channels
-
-        func scalar(_ kp: KeyPath<GainMapChannelParams, Float>,
-                    reduce: ([Float]) -> Float = { $0.reduce(0, +) / Float($0.count) }
-        ) -> String {
-            let vals = channels.map { $0[keyPath: kp] }
-            let allSame = vals.allSatisfy { $0 == vals[0] }
-            let v = allSame ? vals[0] : reduce(vals)
-            return String(format: "%.6f", v)
-        }
-
-        let baseIsHDR = params.baseRenditionIsHDR ? "True" : "False"
-
-        return """
-        <x:xmpmeta xmlns:x="adobe:ns:meta/">
-         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-          <rdf:Description rdf:about=""
-           xmlns:hdrgm="http://ns.adobe.com/hdr-gain-map/1.0/"
-           hdrgm:Version="1.0"
-           hdrgm:BaseRenditionIsHDR="\(baseIsHDR)"
-           hdrgm:GainMapMin="\(scalar(\.gainMapMin, reduce: { $0.min()! }))"
-           hdrgm:GainMapMax="\(scalar(\.gainMapMax, reduce: { $0.max()! }))"
-           hdrgm:Gamma="\(scalar(\.gamma))"
-           hdrgm:OffsetSDR="\(scalar(\.offsetSDR))"
-           hdrgm:OffsetHDR="\(scalar(\.offsetHDR))"
-           hdrgm:HDRCapacityMin="\(String(format: "%.6f", params.baseHeadroom))"
-           hdrgm:HDRCapacityMax="\(String(format: "%.6f", params.alternateHeadroom))"/>
-         </rdf:RDF>
-        </x:xmpmeta>
-        """
     }
 
     // MARK: - Pasteboard (Native)

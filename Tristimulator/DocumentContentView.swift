@@ -1760,7 +1760,7 @@ struct DocumentContentView: View {
         let sdrInfo = buildSDRProcessor(device: srcTex.device)
 
         Task.detached {
-            let ok = await ImageClipboardHelper.exportGainMapImage(
+            let outcome = await ImageClipboardHelper.exportGainMapImage(
                 device: srcTex.device,
                 gpuProcessor: gpu,
                 sourceTexture: srcTex,
@@ -1772,8 +1772,19 @@ struct DocumentContentView: View {
                 sdrColorSpace: sdrInfo?.colorSpace,
                 ultraHDRCompatible: ultraHDR
             )
-            if !ok {
-                await MainActor.run { NSSound.beep() }
+            await MainActor.run {
+                switch outcome {
+                case .saved:
+                    break
+                case .failed:
+                    NSSound.beep()
+                case .savedWithoutUltraHDR(let reason):
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = "Saved without UltraHDR metadata"
+                    alert.informativeText = "The image was saved as an HDR gain-map JPEG, but the UltraHDR metadata for Chrome and Android couldn't be added: \(reason)."
+                    alert.runModal()
+                }
             }
         }
     }
