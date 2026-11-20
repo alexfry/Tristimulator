@@ -1,6 +1,16 @@
-# Tristimulator
+<p align="center">
+  <img src="docs/images/app-icon.png" alt="Tristimulator app icon" width="128" height="128">
+</p>
 
-An idiomatically correct native Mac viewer for OpenEXR and other formats, with OpenColorIO colour management, dynamic ACES 2 rendering, and EDR integration.
+<h1 align="center">Tristimulator</h1>
+
+<p align="center">
+  An idiomatically correct native Mac viewer for OpenEXR and other formats, with OpenColorIO colour management, dynamic ACES 2 rendering, and EDR integration.
+</p>
+
+<p align="center">
+  <img src="docs/images/screenshot.jpg" alt="Tristimulator showing an ACES sample frame with CIE 1931 Yxy, CIE 1976 u'v' and JMh chromaticity diagrams over the image" width="720">
+</p>
 
 ## Features
 
@@ -25,7 +35,7 @@ The help book in `Help/Tristimulator.help` lists the supported file types and ke
 
 ## Install
 
-Signed and notarised builds will be published as DMG files on the [GitHub Releases](https://github.com/alexfry/Tristimulator/releases) page. No release has been published yet, so until one appears you need to build from source.
+Signed and notarised DMGs are on the [Releases](https://github.com/alexfry/Tristimulator/releases) page. Download the DMG from the latest release, open it, and move Tristimulator to your Applications folder.
 
 Quick Look: put Tristimulator in your Applications folder and open it once so macOS registers the extension. If previews do not appear, check that the extension is turned on in System Settings > General > Login Items & Extensions > Quick Look. The extension previews OpenEXR files only.
 
