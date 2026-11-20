@@ -54,6 +54,9 @@ struct TristimulatorApp: App {
                 .help("Load an ACES Metadata File (AMF) sidecar and apply its looks to the current image")
             }
             
+            // Appended to the standard group, not replacing it: that group also holds
+            // Close, Open Recent and Share. The save, rename and move commands in it are removed by
+            // AppDelegate.removeSaveCommands().
             CommandGroup(after: .saveItem) {
                 Button("Export Gain Map Image…") {
                     NotificationCenter.default.post(name: .exportGainMapImage, object: NSApp.keyWindow)
@@ -438,9 +441,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSApplication.didBecomeActiveNotification,
             object: nil
         )
+        // SwiftUI re-adds and resets its menu items whenever it rebuilds a menu,
+        // so re-hide the save commands on every add or change in any menu.
+        for name in [NSMenu.didAddItemNotification, NSMenu.didChangeItemNotification] {
+            center.addObserver(
+                self,
+                selector: #selector(menuItemsDidChange(_:)),
+                name: name,
+                object: nil
+            )
+        }
         applyDebugMenuVisibility(modifierFlags: NSEvent.modifierFlags)
         debugMenuEventMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.flagsChanged, .leftMouseDown, .rightMouseDown]
+            matching: [.flagsChanged, .leftMouseDown, .rightMouseDown, .keyDown]
         ) { [weak self] event in
             self?.applyDebugMenuVisibility(modifierFlags: event.modifierFlags)
             return event
@@ -466,10 +479,70 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyDebugMenuVisibility(modifierFlags: NSEvent.ModifierFlags) {
+        removeSaveCommands()
         guard let item = NSApp.mainMenu?.item(withTitle: "Debug") else { return }
         let persisted = UserDefaults.standard.bool(forKey: TristimulatorDefaults.showDebugMenu)
         let optionHeld = modifierFlags.contains(.option)
         item.isHidden = !(persisted || optionHeld)
+    }
+
+    // MARK: Save commands
+
+    /// Standard document commands that write, rename or move the source file.
+    /// Tristimulator is a viewer: a save would replace the source image, and
+    /// it should not rename or relocate the user's files either.
+    private static let saveCommandActions: Set<String> = [
+        "saveDocument:", "saveDocumentAs:", "saveDocumentTo:",
+        "duplicateDocument:", "revertDocumentToSaved:", "browseDocumentVersions:",
+        "renameDocument:", "moveDocument:"
+    ]
+
+    /// Removes Save, Save As, Duplicate, Rename, Move To and Revert from the
+    /// menu bar. They are removed rather than hidden: AppKit pairs Duplicate
+    /// with its Option-key alternate Save As… and un-hides Duplicate every time
+    /// the File menu opens, so a hidden Duplicate still appears. A removed item
+    /// also has no key equivalent, so Command-S and Shift-Command-S do nothing.
+    /// SwiftUI re-adds its menu items when it rebuilds the menu bar, so this runs
+    /// at launch, from every menu add/change notification, and before key-down
+    /// events are matched against shortcuts.
+    private func removeSaveCommands() {
+        guard let mainMenu = NSApp.mainMenu else { return }
+        for top in mainMenu.items {
+            guard let menu = top.submenu else { continue }
+            var doomed: [NSMenuItem] = []
+            var previousWasRevert = false
+            for item in menu.items {
+                let action = item.action.map { NSStringFromSelector($0) } ?? ""
+                if Self.saveCommandActions.contains(action) {
+                    doomed.append(item)
+                    previousWasRevert = (action == "revertDocumentToSaved:")
+                } else if previousWasRevert, item.submenu != nil {
+                    // The "Revert To" versions submenu sits right after Revert To Saved.
+                    doomed.append(item)
+                    previousWasRevert = false
+                } else {
+                    previousWasRevert = false
+                }
+            }
+            for item in doomed where item.menu === menu {
+                menu.removeItem(item)
+            }
+        }
+    }
+
+    private var saveCommandRemovalScheduled = false
+
+    /// Menu notifications arrive while SwiftUI or AppKit is in the middle of
+    /// building a menu. Removing items from inside that would shift indexes
+    /// under them, so the removal runs once the current pass has finished.
+    @objc private func menuItemsDidChange(_ notification: Notification) {
+        guard !saveCommandRemovalScheduled else { return }
+        saveCommandRemovalScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.saveCommandRemovalScheduled = false
+            self.removeSaveCommands()
+        }
     }
 
     // MARK: New Window command

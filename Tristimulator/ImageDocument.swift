@@ -192,16 +192,23 @@ class ImageDocument: ReferenceFileDocument, ObservableObject {
         // The view will get the proper file URL from the DocumentGroup's file parameter
     }
     
+    // MARK: - Read-only
+    // Tristimulator is a viewer. ReferenceFileDocument still requires the save
+    // hooks below, and by default claims it can write every type it reads. If
+    // the document system ever saved (autosave, Save, Revert), a placeholder
+    // snapshot would replace the user's source image. Declare nothing writable
+    // and fail any save before a byte is written. Exports go through their own
+    // save panels and never through the document.
+    static var writableContentTypes: [UTType] { [] }
+
     func snapshot(contentType: UTType) throws -> Data {
-        // For read-only document, return empty data
-        // Could implement saving processed images here in the future
-        return Data()
+        throw CocoaError(.fileWriteNoPermission)
     }
-    
+
     func fileWrapper(snapshot: Data, configuration: WriteConfiguration) throws -> FileWrapper {
-        return FileWrapper(regularFileWithContents: snapshot)
+        throw CocoaError(.fileWriteNoPermission)
     }
-    
+
     // MARK: - Helper Methods
     
     func loadImageFromFile() async throws {
