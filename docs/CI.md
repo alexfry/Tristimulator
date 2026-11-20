@@ -15,12 +15,12 @@ Doc-only changes do not start CI: `*.md`, `docs/`, `LICENSE`, `ThirdPartyNotices
 
 ## Runner and Xcode
 
-The job label is `macos-26`. That is the Apple Silicon (arm64) GitHub-hosted runner, not the Intel image. As of runner image `macos-26-arm64` `20261102.0473.1`, that image's default Xcode is **26.6** (build `17F113`) at `/Applications/Xcode_26.6.app`, with the macOS 26.5 SDK. The workflow selects that app with `xcode-select` instead of following whatever `/Applications/Xcode.app` points at later.
+The job label is `xcode-27`, the runner image with macOS 27 (image `20261104.0337.1`). Its default Xcode is 27.1, but `Scripts/ci_prepare_runner.sh` pins **Xcode 27.2** (build `27B52`) at `/Applications/Xcode_27.2.app` with `xcode-select` and `DEVELOPER_DIR`, so the compiler does not change when the image default does. The script fails if the macOS SDK is older than 26.4.
 
-Xcode 26.6 is required for two project settings that older Xcodes on the image cannot satisfy together:
+Xcode 27.2 is required for two project settings:
 
-- `ASSETCATALOG_COMPILER_APPICON_NAME = NewIcon2_v002` compiles the Icon Composer bundle `Tristimulator/NewIcon2_v002.icon`. That format needs Xcode 26.
-- `TristimulatorQuickLook` sets `MACOSX_DEPLOYMENT_TARGET = 26.4`, so the SDK must be 26.4 or newer. Xcode 26.4.1 is also on the image, but 26.6 is the current default and its SDK is 26.5.
+- `ASSETCATALOG_COMPILER_APPICON_NAME = NewIcon2_v006_DarkOnly` compiles the Icon Composer bundle `Tristimulator/NewIcon2_v006_DarkOnly.icon`. `Scripts/ci_prepare_runner.sh` explains that the app icon was saved by Icon Composer in Xcode 27 and uses settings that crash Xcode 26.6's `actool`, so the build uses Xcode 27.2.
+- `TristimulatorQuickLook` sets `MACOSX_DEPLOYMENT_TARGET = 26.4`, so the SDK must be 26.4 or newer. Xcode 27.2 satisfies that.
 
 The standard runner is a 3-core M1 with 7 GB of RAM and a small disk, billed at **$0.062 per minute**. vcpkg is capped at two concurrent compiles so the OpenImageIO and libjxl links are less likely to be killed. If free disk is under 20 GB, the job deletes the other Xcode copies and the Android SDK before compiling. Larger macOS runners are not available on a GitHub Pro plan.
 
