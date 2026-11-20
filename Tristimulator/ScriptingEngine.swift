@@ -63,6 +63,8 @@ final class ScriptingEngine {
     private var stdinHandle:  FileHandle?
     private var stdoutHandle: FileHandle?
     private var lineBuffer = ""
+    /// Tags each request so a reply can be matched to it. Only touched on ioQueue.
+    private var nextRequestID = 0
 
     /// All daemon I/O runs here; reads and writes must never interleave.
     private let ioQueue = DispatchQueue(label: "com.tristimulator.scripting.io", qos: .userInitiated)
@@ -142,6 +144,17 @@ final class ScriptingEngine {
         p.standardOutput = stdout
         p.standardError  = stderr
 
+        // The daemon redirects the user script's print() output to stderr. Nothing
+        // displays it, but it must be drained or the daemon blocks once the pipe
+        // buffer fills.
+        stderr.fileHandleForReading.readabilityHandler = { handle in
+            if handle.availableData.isEmpty { handle.readabilityHandler = nil }
+        }
+
+        // Writing to a daemon that has already exited must fail with an error,
+        // not kill the app with SIGPIPE.
+        signal(SIGPIPE, SIG_IGN)
+
         p.terminationHandler = { [weak self] _ in
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.daemonStatus != .stopped else { return }
@@ -177,11 +190,23 @@ final class ScriptingEngine {
     }
 
     func reloadScript() {
-        guard case .running = daemonStatus, let stdinHandle else { return }
-        let msg = "{\"_command\":\"reload\"}\n"
-        guard let data = msg.data(using: .utf8) else { return }
-        ioQueue.async { stdinHandle.write(data) }
-        print("🔄 [Scripting] Reload command sent")
+        guard case .running = daemonStatus, let stdinHandle, let stdoutHandle else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            // Goes through the same request/reply path as evaluate() so the
+            // daemon's reply is consumed here and not by the next evaluation.
+            let reply = await self.sendAndReceive(["_command": "reload"],
+                                                  stdin: stdinHandle, stdout: stdoutHandle)
+            await MainActor.run {
+                if let err = reply?["_error"] as? String {
+                    self.lastError = err
+                    print("⚠️ [Scripting] \(err)")
+                } else if reply != nil {
+                    self.lastError = nil
+                    print("🔄 [Scripting] Script reloaded")
+                }
+            }
+        }
     }
 
     // MARK: - Python availability check
@@ -218,43 +243,44 @@ final class ScriptingEngine {
         }
 
         guard let stdinHandle, let stdoutHandle else { return nil }
-        guard let jsonLine = buildContextJSON(context) else { return nil }
-
-        guard let responseLine = await sendAndReceive(
-            jsonLine, stdin: stdinHandle, stdout: stdoutHandle
+        guard let reply = await sendAndReceive(
+            buildContextDict(context), stdin: stdinHandle, stdout: stdoutHandle
         ) else { return nil }
 
-        return parseResult(responseLine)
+        return parseResult(reply)
     }
 
     // MARK: - Private: IPC
 
-    /// Write one JSON line to the daemon and read one JSON line back.
-    /// A 5-second wall-clock timeout terminates the daemon (which unblocks
-    /// the blocking `availableData` read) and returns nil.
-    private func sendAndReceive(_ line: String, stdin: FileHandle, stdout: FileHandle) async -> String? {
-        await withCheckedContinuation { [weak self] continuation in
+    /// Send one JSON request to the daemon and return the reply that carries the
+    /// same `_id`. Lines with a different or missing `_id` (a late reply to a
+    /// timed-out request, or an unsolicited load error) are skipped.
+    /// If no reply arrives within 5 seconds the daemon is terminated (which
+    /// unblocks the blocking `availableData` read) and nil is returned.
+    private func sendAndReceive(_ request: [String: Any], stdin: FileHandle, stdout: FileHandle) async -> [String: Any]? {
+        await withCheckedContinuation { [weak self] (continuation: CheckedContinuation<[String: Any]?, Never>) in
             guard let self else { continuation.resume(returning: nil); return }
 
             // Only one resume may fire; guard with a lock so timeout and IO don't race.
+            // Returns true for the caller that actually resumed the continuation.
             let onceLock = NSLock()
             var resumed  = false
-            func resumeOnce(_ value: String?) {
+            @discardableResult
+            func resumeOnce(_ value: [String: Any]?) -> Bool {
                 onceLock.lock(); defer { onceLock.unlock() }
-                guard !resumed else { return }
+                guard !resumed else { return false }
                 resumed = true
                 continuation.resume(returning: value)
+                return true
             }
 
-            // Timeout: kill the daemon after 5 s — this makes availableData return EOF,
-            // unblocking the IO path below so neither path leaks indefinitely.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            // Timeout: fires only if the IO path below has not finished. Killing
+            // the daemon makes availableData return EOF, so the IO path unblocks.
+            let timeout = DispatchWorkItem { [weak self] in
+                guard resumeOnce(nil) else { return }
                 self?.process?.terminate()
-                Task { @MainActor [weak self] in
-                    self?.daemonStatus = .error("Script timed out (5 s)")
-                    self?.lastError    = "Script evaluation timed out after 5 seconds"
-                }
-                resumeOnce(nil)
+                self?.daemonStatus = .error("Script timed out (5 s)")
+                self?.lastError    = "Script evaluation timed out after 5 seconds"
             }
 
             // Blocking I/O on the dedicated queue.
@@ -262,24 +288,51 @@ final class ScriptingEngine {
                 guard let self else { resumeOnce(nil); return }
                 self.ioLock.lock(); defer { self.ioLock.unlock() }
 
-                guard let data = (line + "\n").data(using: .utf8) else {
+                // Start the clock once this request is actually being sent, not
+                // while it waits behind an earlier one.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: timeout)
+                defer { timeout.cancel() }
+
+                self.nextRequestID += 1
+                let requestID = self.nextRequestID
+                var tagged = request
+                tagged["_id"] = requestID
+
+                guard var data = try? JSONSerialization.data(withJSONObject: tagged) else {
                     resumeOnce(nil); return
                 }
-                stdin.write(data)
-
-                // Buffer until we have at least one complete line.
-                while !self.lineBuffer.contains("\n") {
-                    let chunk = stdout.availableData          // blocks until data or EOF
-                    if chunk.isEmpty { resumeOnce(nil); return }
-                    self.lineBuffer += String(data: chunk, encoding: .utf8) ?? ""
+                data.append(0x0A)
+                do {
+                    try stdin.write(contentsOf: data)
+                } catch {
+                    resumeOnce(nil); return
                 }
 
-                if let idx = self.lineBuffer.firstIndex(of: "\n") {
-                    let result = String(self.lineBuffer[..<idx])
+                while true {
+                    // Buffer until we have at least one complete line.
+                    while !self.lineBuffer.contains("\n") {
+                        let chunk = stdout.availableData          // blocks until data or EOF
+                        if chunk.isEmpty { resumeOnce(nil); return }
+                        self.lineBuffer += String(decoding: chunk, as: UTF8.self)
+                    }
+                    guard let idx = self.lineBuffer.firstIndex(of: "\n") else { continue }
+                    let line = String(self.lineBuffer[..<idx])
                     self.lineBuffer = String(self.lineBuffer[self.lineBuffer.index(after: idx)...])
-                    resumeOnce(result)
-                } else {
-                    resumeOnce(nil)
+
+                    guard let lineData = line.data(using: .utf8),
+                          let dict = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any]
+                    else { continue }
+
+                    if (dict["_id"] as? NSNumber)?.intValue == requestID {
+                        resumeOnce(dict)
+                        return
+                    }
+                    // Not ours. Keep an unsolicited error (script failed to load
+                    // at daemon start) visible in the preferences pane.
+                    if let err = dict["_error"] as? String {
+                        Task { @MainActor in self.lastError = err }
+                        print("⚠️ [Scripting] \(err)")
+                    }
                 }
             }
         }
@@ -287,7 +340,7 @@ final class ScriptingEngine {
 
     // MARK: - Private: JSON helpers
 
-    private func buildContextJSON(_ ctx: ScriptingContext) -> String? {
+    private func buildContextDict(_ ctx: ScriptingContext) -> [String: Any] {
         let url  = ctx.fileURL
         let meta = ctx.imageData?.metadata
 
@@ -295,7 +348,7 @@ final class ScriptingEngine {
         if let v = ProcessInfo.processInfo.environment["OCIO"] { envDict["OCIO"] = v }
         if let h = Host.current().name                          { envDict["HOST"] = h }
 
-        let dict: [String: Any] = [
+        return [
             "path":      url.path,
             "filename":  url.lastPathComponent,
             "extension": url.pathExtension.lowercased(),
@@ -318,15 +371,11 @@ final class ScriptingEngine {
                 "view":        ctx.currentView
             ] as [String: Any]
         ]
-
-        guard let data = try? JSONSerialization.data(withJSONObject: dict) else { return nil }
-        return String(data: data, encoding: .utf8)
     }
 
-    private func parseResult(_ line: String) -> ScriptingResult? {
-        guard let data = line.data(using: .utf8),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
+    private func parseResult(_ reply: [String: Any]) -> ScriptingResult? {
+        var dict = reply
+        dict.removeValue(forKey: "_id")
 
         // Ignore daemon control responses that aren't evaluate results.
         if dict["_pong"] != nil || dict["_reloaded"] != nil { return nil }

@@ -26,7 +26,11 @@ def _load_module(path):
     return module
 
 
-def _reply(obj):
+def _reply(obj, req_id=None):
+    # Echo the request's _id so the app can match each reply to its request.
+    if req_id is not None:
+        obj = dict(obj)
+        obj["_id"] = req_id
     _ipc_stdout.write(json.dumps(obj) + "\n")
     _ipc_stdout.flush()
 
@@ -56,33 +60,38 @@ def main():
             _reply({"_error": f"Invalid JSON from app: {exc}"})
             continue
 
+        if not isinstance(msg, dict):
+            _reply({"_error": "Request from app is not a JSON object"})
+            continue
+        req_id = msg.pop("_id", None)
+
         # Control messages
         cmd = msg.get("_command")
         if cmd == "ping":
-            _reply({"_pong": True})
+            _reply({"_pong": True}, req_id)
             continue
         if cmd == "reload":
             try:
                 module = _load_module(script_path)
-                _reply({"_reloaded": True})
+                _reply({"_reloaded": True}, req_id)
             except Exception as exc:
-                _reply({"_error": f"Reload failed: {exc}"})
+                _reply({"_error": f"Reload failed: {exc}"}, req_id)
             continue
 
         # Normal evaluate call
         if module is None:
-            _reply({})
+            _reply({}, req_id)
             continue
 
         if not hasattr(module, "evaluate"):
-            _reply({"_error": "Script must define an evaluate(ctx) function"})
+            _reply({"_error": "Script must define an evaluate(ctx) function"}, req_id)
             continue
 
         try:
             result = module.evaluate(msg)
-            _reply(result if isinstance(result, dict) else {})
+            _reply(result if isinstance(result, dict) else {}, req_id)
         except Exception:
-            _reply({"_error": traceback.format_exc().strip()})
+            _reply({"_error": traceback.format_exc().strip()}, req_id)
 
 
 if __name__ == "__main__":
