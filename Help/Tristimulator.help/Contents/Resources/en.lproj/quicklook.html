@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Preview images in the Finder with Quick Look</title>
+<meta name="description" content="Press the Space bar in the Finder to preview an OpenEXR file with the ACES 2.0 output transform and HDR, without opening Tristimulator." />
+<meta name="keywords" content="QuickLook, quick view, spacebar, space key, Finder preview, peek, preview extension, qlmanage" />
+<link rel="stylesheet" href="../shrd/help.css" />
+</head>
+<body class="topic">
+<header class="bookbar"><a href="TristimulatorHelp.html"><img src="../shrd/icon32.png" alt="" width="20" height="20" />Tristimulator Help</a></header>
+<div class="layout">
+<nav class="toc" aria-label="Table of Contents">
+<h2>Get started</h2><ul>
+<li><a href="opening.html">Open images, sequences, and movies</a></li>
+<li><a href="formats.html">File formats Tristimulator can open</a></li>
+</ul>
+<h2>View images</h2><ul>
+<li><a href="viewing.html">Zoom and pan an image</a></li>
+<li><a href="exposure.html">Adjust exposure and view channels</a></li>
+<li><a href="info.html">Check image information and HDR</a></li>
+<li><a href="fullscreen.html">View an image in full screen</a></li>
+<li><a href="quicklook.html" class="current">Preview images in the Finder with Quick Look</a></li>
+</ul>
+<h2>Play movies and sequences</h2><ul>
+<li><a href="playback.html">Play movies and image sequences</a></li>
+</ul>
+<h2>Manage colour</h2><ul>
+<li><a href="color.html">Set up colour with OpenColorIO</a></li>
+<li><a href="colordefaults.html">Change the default colour settings</a></li>
+<li><a href="scopes.html">Show chromaticity diagrams</a></li>
+</ul>
+<h2>Copy and export</h2><ul>
+<li><a href="export.html">Copy or export an image</a></li>
+</ul>
+<h2>Reference</h2><ul>
+<li><a href="shortcuts.html">Keyboard shortcuts in Tristimulator</a></li>
+</ul>
+</nav>
+<main>
+<a name="quicklook" id="quicklook"></a>
+<h1>Preview images in the Finder with Quick Look</h1>
+<p>Tristimulator includes a Quick Look extension, so you can preview an OpenEXR file in the Finder without opening Tristimulator. The preview uses the ACES&#160;2.0 output transform and shows HDR highlights on displays that support extended dynamic range (EDR).</p>
+<h2>Preview a file</h2>
+<ol>
+<li><p>In the Finder, select an OpenEXR (<code>.exr</code>) file.</p></li>
+<li><p>Press the Space bar, or choose <span class="ui">File</span> &gt; <span class="ui">Quick Look</span>.</p></li>
+<li><p>Press the Space bar again to close the preview.</p></li>
+</ol>
+<p>The extension previews OpenEXR files only. Other formats, such as Radiance HDR, DPX, and TIFF, use the Quick Look previews built into macOS. The extension doesn’t make Finder icon thumbnails; those come from macOS.</p>
+<h2>How the preview handles colour</h2>
+<p>The preview uses a fixed pipeline. It doesn’t use your OpenColorIO config, the colour settings you saved for the image in Tristimulator, or an attached ACES Metadata File (AMF).</p>
+<ol>
+<li><p>The extension reads the file’s <code>colorSpace</code> attribute and converts the pixels to ACES2065-1. It recognises these names:</p>
+<ul>
+<li><p>ACES2065-1: <code>ACES2065-1</code>, <code>lin_ap0</code>, <code>Linear ACES</code>, and <code>ACES</code></p></li>
+<li><p>ACEScg: <code>ACEScg</code>, <code>lin_ap1</code>, <code>Linear ACEScg</code>, and <code>lin_ap1_scene</code></p></li>
+<li><p>Linear Rec.709: <code>Linear Rec.709</code>, <code>Linear Rec709</code>, <code>Linear sRGB</code>, <code>lin_rec709</code>, <code>lin_srgb</code>, <code>sRGB - Linear</code>, <code>Linear</code>, and <code>scene_linear</code></p></li>
+<li><p>Linear P3-D65: <code>Linear P3-D65</code>, <code>lin_p3d65</code>, <code>Linear Display P3</code>, <code>lin_displayp3</code>, and <code>Apple Display P3 Linear</code></p></li>
+</ul>
+<p>Names aren’t case-sensitive. If the file has no recognised name, the extension uses the file’s <code>chromaticities</code> attribute. If it has neither, it treats the pixels as linear Rec.709.</p></li>
+<li><p>It applies the ACES&#160;2.0 output transform to linear P3-D65. The peak brightness is 100&#160;nits multiplied by the display’s current EDR headroom, and is never less than 100&#160;nits. The preview redraws when the headroom changes.</p></li>
+</ol>
+<p>The preview shows the image at 0&#160;stops exposure, with all colour channels and no alpha, on a black background. It shows the image that macOS decodes from the file, so you can’t choose an OpenEXR layer. To change exposure, channels, layers, or colour settings, open the file in Tristimulator.</p>
+<h2>If the preview doesn’t appear</h2>
+<ul>
+<li><p>Put Tristimulator in your Applications folder and open it once. macOS registers the Quick Look extension when the app is opened.</p></li>
+<li><p>Make sure the extension is turned on. Choose Apple menu &gt; <span class="ui">System Settings</span>, click <span class="ui">General</span>, click <span class="ui">Login Items &amp; Extensions</span>, then make sure the Tristimulator extension is turned on under <span class="ui">Quick Look</span>.</p></li>
+<li><p>Reset Quick Look. In Terminal, enter <code>qlmanage -r</code> and <code>qlmanage -r cache</code>, then try the preview again.</p></li>
+</ul>
+<p>The preview needs a Mac that supports Metal.</p>
+<section class="seealso"><h2>See also</h2><ul><li><a href="formats.html">File formats Tristimulator can open</a></li><li><a href="color.html">Set up colour with OpenColorIO</a></li><li><a href="info.html">Check image information and HDR</a></li></ul></section>
+<p class="contents-link"><a href="TristimulatorHelp.html">Table of Contents</a></p>
+</main>
+</div>
+</body>
+</html>

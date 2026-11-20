@@ -1,0 +1,783 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Supplemental Info.plist — merged with the Xcode-generated plist at build time
+    (GENERATE_INFOPLIST_FILE = YES + INFOPLIST_FILE = this file).
+
+    Contains:
+      • UTImportedTypeDeclarations  — custom UTIs for formats macOS doesn't know natively
+      • CFBundleDocumentTypes       — teaches Launch Services which files to route to us
+        (drag-to-icon, Finder "Open With", etc.)
+
+    Formats registered for Finder Open With:
+      VFX/Film:   EXR, DPX, Cineon, Radiance HDR, IFF, RLA, Softimage PIC
+      Standard:   PNG, JPEG, TIFF (+TX/ENV variants), BMP, GIF, WebP, HEIC/HEIF,
+                  PSD, TGA, SGI/RGB, ICO, JPEG-2000, JPEG-XL
+      Textures:   DDS, TIFF texture (.tx / .env / .sm / .vsm)
+      Float:      PBM/PPM/PGM/PNM, PFM
+                  Camera RAW and DNG are not registered. LibRaw is not linked.
+      Scientific: FITS, DICOM
+-->
+<plist version="1.0">
+<dict>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         IMPORTED UTI DECLARATIONS
+         Only needed for formats that macOS does not already know about.
+         Standard UTIs (PNG, JPEG, TIFF, PSD, TGA, SGI, WebP, HEIC, etc.)
+         are already defined by the OS and need no import.
+         ═══════════════════════════════════════════════════════════════ -->
+    <key>UTImportedTypeDeclarations</key>
+    <array>
+
+        <!-- ─── OpenEXR ─────────────────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.ilm.openexr-image</string>
+            <key>UTTypeDescription</key>
+            <string>OpenEXR Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>exr</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>image/x-exr</string>
+                    <string>image/openexr</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── Radiance RGBE / HDR ──────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.radiance.hdr-image</string>
+            <key>UTTypeDescription</key>
+            <string>Radiance HDR Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>hdr</string>
+                    <string>hdri</string>
+                    <string>rgbe</string>
+                    <string>xyze</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>image/vnd.radiance</string>
+                    <string>image/x-hdr</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── DPX ──────────────────────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.smpte.dpx-image</string>
+            <key>UTTypeDescription</key>
+            <string>DPX Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>dpx</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>image/x-dpx</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── Cineon ───────────────────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.kodak.cineon-image</string>
+            <key>UTTypeDescription</key>
+            <string>Cineon Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>cin</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── IFF (Maya / Amiga) ───────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.autodesk.iff-image</string>
+            <key>UTTypeDescription</key>
+            <string>IFF Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>iff</string>
+                    <string>z</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── RLA (Wavefront / Autodesk) ──────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.autodesk.rla-image</string>
+            <key>UTTypeDescription</key>
+            <string>RLA Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>rla</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── Softimage PIC ────────────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.softimage.pic-image</string>
+            <key>UTTypeDescription</key>
+            <string>Softimage PIC Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>pic</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── DirectDraw Surface ───────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.microsoft.directdraw-surface</string>
+            <key>UTTypeDescription</key>
+            <string>DirectDraw Surface Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>dds</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── TIFF Texture variants (.tx / .env / .sm / .vsm) ──────── -->
+        <!--     These are standard TIFF files but with non-standard        -->
+        <!--     extensions used heavily in VFX / RenderMan pipelines.      -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.alexanderfry.tristimulator.tiff-texture</string>
+            <key>UTTypeDescription</key>
+            <string>TIFF Texture</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.tiff</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>tx</string>
+                    <string>env</string>
+                    <string>sm</string>
+                    <string>vsm</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── Portable Float Map ───────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.netpbm.pfm-image</string>
+            <key>UTTypeDescription</key>
+            <string>Portable Float Map Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>pfm</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── JPEG XL ──────────────────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>public.jxl</string>
+            <key>UTTypeDescription</key>
+            <string>JPEG XL Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>jxl</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>image/jxl</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── FITS (astronomical) ──────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>edu.fits.fits-image</string>
+            <key>UTTypeDescription</key>
+            <string>FITS Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>fits</string>
+                    <string>fit</string>
+                    <string>fts</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── DICOM (medical) ──────────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.dcm4che.dicom-image</string>
+            <key>UTTypeDescription</key>
+            <string>DICOM Image</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.image</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>dcm</string>
+                    <string>dicom</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── CLF Common LUT Format ───────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.acescentral.clf</string>
+            <key>UTTypeDescription</key>
+            <string>Common LUT Format</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.xml</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>clf</string>
+                    <string>clfz</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>application/xml</string>
+                </array>
+            </dict>
+        </dict>
+
+        <!-- ─── ACES Metadata File ───────────────────────────────────── -->
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.ampas.aces-metadata-file</string>
+            <key>UTTypeDescription</key>
+            <string>ACES Metadata File</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.xml</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>amf</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>application/xml</string>
+                </array>
+            </dict>
+        </dict>
+
+    </array>
+
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         DOCUMENT TYPES  (CFBundleDocumentTypes)
+         Tells Launch Services which files this app can open.
+         LSHandlerRank:
+           Owner    — we declare ownership (e.g. EXR — few other apps handle it)
+           Alternate — standard formats where Preview / Photos is the default
+         ═══════════════════════════════════════════════════════════════ -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+
+        <!-- ──────── VFX / Film (Owner rank) ──────── -->
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>OpenEXR Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.ilm.openexr-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>DPX Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.smpte.dpx-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Cineon Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.kodak.cineon-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Radiance HDR Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.radiance.hdr-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>IFF Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.autodesk.iff-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>RLA Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.autodesk.rla-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Softimage PIC Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.softimage.pic-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>TIFF Texture</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.alexanderfry.tristimulator.tiff-texture</string>
+            </array>
+        </dict>
+
+        <!-- ──────── Standard formats (Alternate rank) ──────── -->
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>PNG Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.png</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>JPEG Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.jpeg</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>TIFF Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.tiff</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Adobe Photoshop Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.adobe.photoshop-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>BMP Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.microsoft.bmp</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>GIF Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.compuserve.gif</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>WebP Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.webmproject.webp</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>HEIC Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.heic</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>HEIF Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.heif</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Targa Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.truevision.tga-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>SGI Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.sgi.sgi-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>ICO Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.microsoft.ico</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>JPEG 2000 Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.jpeg-2000</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>JPEG XL Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.jxl</string>
+            </array>
+        </dict>
+
+        <!-- ──────── Textures ──────── -->
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>DirectDraw Surface Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.microsoft.directdraw-surface</string>
+            </array>
+        </dict>
+
+        <!-- ──────── Bitmap / Float ──────── -->
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Portable Bitmap Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.pbm</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Portable Float Map Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.netpbm.pfm-image</string>
+            </array>
+        </dict>
+
+        <!-- ──────── Scientific ──────── -->
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>FITS Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>edu.fits.fits-image</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>DICOM Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.dcm4che.dicom-image</string>
+            </array>
+        </dict>
+
+        <!-- ──────── Movie / Video (opened via AVFoundation) ──────── -->
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>QuickTime Movie</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.apple.quicktime-movie</string>
+            </array>
+        </dict>
+
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>MPEG-4 Movie</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.mpeg-4</string>
+            </array>
+        </dict>
+
+    </array>
+
+    <!-- Apple Help book. Tristimulator.help is copied into Contents/Resources.
+         CFBundleHelpBookName must match HPDBookTitle in the help bundle. -->
+    <key>CFBundleHelpBookFolder</key>
+    <string>Tristimulator.help</string>
+    <key>CFBundleHelpBookName</key>
+    <string>Tristimulator Help</string>
+
+</dict>
+</plist>

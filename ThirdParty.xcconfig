@@ -1,0 +1,15 @@
+// ThirdParty.xcconfig
+//
+// Wires the Tristimulator target to the vcpkg-built static-library install prefix
+// at ~/Library/Caches/Tristimulator/ThirdParty/installed/arm64-osx-tristimulator.
+//
+// The actual -l<lib> link flags are written by Scripts/build_thirdparty.sh into
+// Generated/ThirdParty.generated.xcconfig (gitignored, regenerated on every
+// manifest change), which we #include below.
+
+THIRDPARTY_PREFIX = $(HOME)/Library/Caches/Tristimulator/ThirdParty/installed/arm64-osx-tristimulator
+
+HEADER_SEARCH_PATHS = $(inherited) $(THIRDPARTY_PREFIX)/include $(THIRDPARTY_PREFIX)/include/OpenEXR $(THIRDPARTY_PREFIX)/include/Imath
+LIBRARY_SEARCH_PATHS = $(inherited) $(THIRDPARTY_PREFIX)/lib
+
+#include? "Generated/ThirdParty.generated.xcconfig"

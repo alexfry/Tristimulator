@@ -1,0 +1,164 @@
+#! /Applications/Nuke16.0v1/Nuke16.0v1.app/Contents/MacOS/libnuke-16.0.1.dylib -nx
+#write_info Write1 file:"/Users/afry/GitHub/Tristimulator/Icons/OCIO_logo_frame.exr" format:"1920 1080 1" chans:":rgba.red:rgba.green:rgba.blue:rgba.alpha:" framerange:"1 100" fps:"0" colorspace:"default (scene_linear)" datatype:"16 bit half" transfer:"unknown" views:"main" colorManagement:"OCIO"
+version 16.0 v1
+define_window_layout_xml {<?xml version="1.0" encoding="UTF-8"?>
+<layout version="1.0">
+    <window x="0" y="33" w="1728" h="963" maximized="1" screen="0">
+        <splitter orientation="1">
+            <split size="40"/>
+            <dock id="" hideTitles="1" activePageId="Toolbar.1">
+                <page id="Toolbar.1"/>
+            </dock>
+            <split size="1065" stretch="1"/>
+            <splitter orientation="2">
+                <split size="554"/>
+                <dock id="" activePageId="Viewer.1">
+                    <page id="Viewer.1"/>
+                </dock>
+                <split size="389"/>
+                <dock id="" activePageId="DAG.1" focus="true">
+                    <page id="DAG.1"/>
+                    <page id="Curve Editor.1"/>
+                    <page id="DopeSheet.1"/>
+                </dock>
+            </splitter>
+            <split size="615"/>
+            <dock id="" activePageId="Properties.1">
+                <page id="Properties.1"/>
+                <page id="uk.co.thefoundry.backgroundrenderview.1"/>
+                <page id="Scenegraph.1"/>
+            </dock>
+        </splitter>
+    </window>
+</layout>
+}
+Root {
+ inputs 0
+ name /Users/afry/GitHub/Tristimulator/Icons/OCIO_LogoImage.nk
+ format "1920 1080 0 0 1920 1080 1 HD_1080"
+ proxy_type scale
+ proxy_format "1024 778 0 0 1024 778 1 1K_Super_35(full-ap)"
+ colorManagement OCIO
+ OCIO_config custom
+ customOCIOConfigPath /Users/afry/GitHub/ACES_ODT_Candidates/OCIO/ACES_v2.0.0_DisplayP3.ocio
+ defaultViewerLUT "OCIO LUTs"
+ workingSpaceLUT scene_linear
+ monitorLut "ACES 2.0.0 - DisplayP3 (Rec.709 Limited) (ACES)"
+ monitorOutLUT "ACES 2.0.0 - DisplayP3 (Rec.709 Limited) (ACES)"
+ int8Lut matte_paint
+ int16Lut texture_paint
+ logLut compositing_log
+ floatLut scene_linear
+}
+Read {
+ inputs 0
+ file_type png
+ file /Users/afry/GitHub/Tristimulator/Icons/opencolorio-icon-white_1k.png
+ format "1024 1043 0 0 1024 1043 1 "
+ origset true
+ name Read1
+ xpos -343
+ ypos -77
+}
+Premult {
+ name Premult1
+ xpos -343
+ ypos 13
+}
+Reformat {
+ resize height
+ name Reformat1
+ xpos -343
+ ypos 37
+}
+Radial {
+ inputs 0
+ area {798.875 371.5 1124.5 715.5}
+ softness 0
+ name Radial1
+ xpos -27
+ ypos -36
+}
+ColorWheel {
+ inputs 0
+ centerSaturation 1
+ centerValue 2
+ gamma 0.45
+ name ColorWheel1
+ xpos -143
+ ypos -95
+}
+Radial {
+ area {798.875 371.5 1124.5 715.5}
+ softness 0
+ name Radial2
+ xpos -143
+ ypos -23
+}
+EXPTool {
+ inputs 1+1
+ mode Stops
+ red 4
+ green 4
+ blue 4
+ name Exposure1
+ xpos -143
+ ypos 17
+}
+Transform {
+ center {960 540}
+ name Transform2
+ xpos -143
+ ypos 41
+}
+Merge2 {
+ inputs 2
+ operation multiply
+ name Multiply
+ xpos -143
+ ypos 98
+}
+Transform {
+ scale 0.59
+ center {960 540}
+ name Transform1
+ xpos -143
+ ypos 139
+}
+OCIOColorSpace {
+ in_colorspace scene_linear
+ out_colorspace default
+ name OCIOColorSpace1
+ xpos -143
+ ypos 163
+}
+Crop {
+ box {0 0 1920 1080}
+ name Crop1
+ xpos -143
+ ypos 187
+}
+Write {
+ channels rgba
+ file /Users/afry/GitHub/Tristimulator/Icons/OCIO_logo_frame.exr
+ file_type exr
+ write_ACES_compliant_EXR true
+ first_part rgba
+ version 2
+ ocioColorspace scene_linear
+ display ACES
+ view "ACES 2.0.0 - DisplayP3 (Rec.709 Limited)"
+ name Write1
+ xpos -143
+ ypos 334
+}
+Viewer {
+ frame 1
+ frame_range 1-100
+ gl_buffer_depth half-float
+ viewerProcess "ACES 2.0.0 - DisplayP3 (P3D65 1000nit Limited) (ACES)"
+ monitorOutNDISenderName "Nuke - untitled - Viewer1"
+ name Viewer1
+ xpos 90
+ ypos 52
+}

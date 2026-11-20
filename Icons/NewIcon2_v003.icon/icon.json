@@ -1,0 +1,501 @@
+{
+  "features" : [
+    "refractivity"
+  ],
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.21909,0.22844,0.21852,1.00000",
+      "display-p3:0.09886,0.10244,0.09908,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 1
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.3
+      }
+    }
+  },
+  "groups" : [
+    {
+      "blend-mode" : "normal",
+      "blur-material" : 0.39,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "display-p3:0.94441,0.94441,0.94441,0.26609"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "automatic-gradient" : "display-p3:0.48395,0.48395,0.48395,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "display-p3:0.03455,0.03455,0.03455,1.00000"
+              }
+            }
+          ],
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "NewIcon2_Loupe 2.svg",
+          "name" : "NewIcon2_Loupe 2",
+          "position" : {
+            "scale" : 0.27999999999999975,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting" : "combined",
+      "name" : "Group",
+      "opacity" : 1,
+      "position" : {
+        "scale" : 0.78,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0,
+        "enabled" : false,
+        "strength" : 0.5
+      },
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.27
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 1
+      }
+    },
+    {
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.47561,1.00000,1.00000,0.33206",
+              "display-p3:0.35454,0.56905,0.80588,0.36724"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 0.5,
+                "y" : 0.7
+              }
+            }
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "NewIcon2_Lens 5.svg",
+          "name" : "NewIcon2_Lens 5",
+          "position" : {
+            "scale" : 0.273,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "position" : {
+        "scale" : 0.74,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0.2208203125,
+        "enabled" : true,
+        "strength" : -0.35984375
+      },
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.01
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.68103,0.76848,1.00000,1.00000",
+              "srgb:0.00000,0.53333,1.00000,0.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 0.5,
+                "y" : 0.6866038390379278
+              }
+            }
+          },
+          "glass" : false,
+          "image-name" : "reflectionShape001svg.svg",
+          "name" : "reflectionShape001svg",
+          "position" : {
+            "scale" : 0.69,
+            "translation-in-points" : [
+              1.931091598578405,
+              -8
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:1.00000,0.70055,0.88405,1.00000",
+              "srgb:0.00000,0.53333,1.00000,0.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.6027562262417706,
+                "y" : -0.15927641232575307
+              },
+              "stop" : {
+                "x" : 0.5000000000000003,
+                "y" : 1
+              }
+            }
+          },
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "reflectionShape001svg.svg",
+          "name" : "reflectionShape001svg",
+          "position" : {
+            "scale" : 0.6199999999999998,
+            "translation-in-points" : [
+              1.931091598578405,
+              -8
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.89563,0.88674,1.00000,1.00000",
+              "srgb:0.00000,0.53333,1.00000,0.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.4999999999999996,
+                "y" : -0.7859187095282149
+              },
+              "stop" : {
+                "x" : 0.5000000000000003,
+                "y" : 1
+              }
+            }
+          },
+          "glass" : false,
+          "image-name" : "reflectionShape001svg.svg",
+          "name" : "reflectionShape001svg",
+          "position" : {
+            "scale" : 0.5000000000000001,
+            "translation-in-points" : [
+              1.931091598578405,
+              -8
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.90072,1.00000,0.99635,1.00000",
+              "srgb:0.00000,0.53333,1.00000,0.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5,
+                "y" : -1.1622340425531923
+              },
+              "stop" : {
+                "x" : 0.5000000000000007,
+                "y" : 1
+              }
+            }
+          },
+          "glass" : false,
+          "image-name" : "reflectionShape001svg.svg",
+          "name" : "reflectionShape001svg",
+          "position" : {
+            "scale" : 0.25999999999999995,
+            "translation-in-points" : [
+              1.931091598578405,
+              -8
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.92125,0.97424,1.00000,0.00000",
+              "display-p3:0.67625,0.65331,0.96783,0.28540"
+            ]
+          },
+          "glass" : false,
+          "image-name" : "reflectionShape002 2.svg",
+          "name" : "reflectionShape002 2",
+          "position" : {
+            "scale" : 0.13,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.92125,0.97424,1.00000,0.00000",
+              "display-p3:0.51539,0.63909,0.96783,0.20669"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5,
+                "y" : 0.5
+              },
+              "stop" : {
+                "x" : 0.5,
+                "y" : 1
+              }
+            }
+          },
+          "glass" : false,
+          "image-name" : "reflectionShape002 2.svg",
+          "name" : "reflectionShape002 2",
+          "position" : {
+            "scale" : 0.25,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.92125,0.97424,1.00000,0.00000",
+              "display-p3:0.17477,0.68971,0.96783,0.32250"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.4999999999999998,
+                "y" : 0.06826872129989393
+              },
+              "stop" : {
+                "x" : 0.12709050076452616,
+                "y" : 1
+              }
+            }
+          },
+          "glass" : false,
+          "image-name" : "reflectionShape002 2.svg",
+          "name" : "reflectionShape002 2",
+          "position" : {
+            "scale" : 0.57,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.92125,0.97424,1.00000,0.00000",
+              "display-p3:0.61373,0.85719,0.96783,0.32250"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : -0.10227608101726951,
+                "y" : 0.251943717923411
+              },
+              "stop" : {
+                "x" : 0.808514697450081,
+                "y" : 0.8211952230556653
+              }
+            }
+          },
+          "glass" : false,
+          "image-name" : "reflectionShape002 2.svg",
+          "name" : "reflectionShape002 2",
+          "position" : {
+            "scale" : 0.68,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.38342,0.38342,0.38342,1.00000",
+              "display-p3:0.16564,0.16564,0.16564,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5000000000000001,
+                "y" : 1
+              },
+              "stop" : {
+                "x" : 0.5000000000000001,
+                "y" : 0.05724538434043946
+              }
+            }
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "NewIcon2_Loupe 2.svg",
+          "name" : "NewIcon2_Loupe 2",
+          "position" : {
+            "scale" : 0.17,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.28818,0.28818,0.28818,1.00000",
+              "display-p3:0.00000,0.00000,0.00000,1.00000"
+            ]
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "NewIcon2_Loupe 2.svg",
+          "name" : "NewIcon2_Loupe 2",
+          "position" : {
+            "scale" : 0.19,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    },
+    {
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.39119,0.39119,0.39119,1.00000",
+              "display-p3:0.08826,0.08826,0.08826,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 0.5,
+                "y" : 0.7
+              }
+            }
+          },
+          "glass" : true,
+          "image-name" : "NewIcon2_Rebate 3.svg",
+          "name" : "NewIcon2_Rebate 3",
+          "position" : {
+            "scale" : 0.25,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.69434,0.96841,0.31680,1.00000",
+              "display-p3:0.12517,0.09589,0.50000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 2.171467177672956,
+                "y" : -0.2092675358499409
+              },
+              "stop" : {
+                "x" : -0.36953002161949694,
+                "y" : 1.075251712351482
+              }
+            }
+          },
+          "glass" : true,
+          "image-name" : "NewIcon2_Frames 3.svg",
+          "name" : "NewIcon2_Frames 3",
+          "position" : {
+            "scale" : 0.25,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "position" : {
+        "scale" : 1.06,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.33
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

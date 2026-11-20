@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Set up colour with OpenColorIO</title>
+<meta name="description" content="Open the OpenColorIO colour pipeline from the toolbar and choose the config, source, working space, looks, display, and screen output." />
+<meta name="keywords" content="OCIO, color, color management, colour management, transform, LUT, view transform, display transform" />
+<link rel="stylesheet" href="../shrd/help.css" />
+</head>
+<body class="topic">
+<header class="bookbar"><a href="TristimulatorHelp.html"><img src="../shrd/icon32.png" alt="" width="20" height="20" />Tristimulator Help</a></header>
+<div class="layout">
+<nav class="toc" aria-label="Table of Contents">
+<h2>Get started</h2><ul>
+<li><a href="opening.html">Open images, sequences, and movies</a></li>
+<li><a href="formats.html">File formats Tristimulator can open</a></li>
+</ul>
+<h2>View images</h2><ul>
+<li><a href="viewing.html">Zoom and pan an image</a></li>
+<li><a href="exposure.html">Adjust exposure and view channels</a></li>
+<li><a href="info.html">Check image information and HDR</a></li>
+<li><a href="fullscreen.html">View an image in full screen</a></li>
+<li><a href="quicklook.html">Preview images in the Finder with Quick Look</a></li>
+</ul>
+<h2>Play movies and sequences</h2><ul>
+<li><a href="playback.html">Play movies and image sequences</a></li>
+</ul>
+<h2>Manage colour</h2><ul>
+<li><a href="color.html" class="current">Set up colour with OpenColorIO</a></li>
+<li><a href="colordefaults.html">Change the default colour settings</a></li>
+<li><a href="scopes.html">Show chromaticity diagrams</a></li>
+</ul>
+<h2>Copy and export</h2><ul>
+<li><a href="export.html">Copy or export an image</a></li>
+</ul>
+<h2>Reference</h2><ul>
+<li><a href="shortcuts.html">Keyboard shortcuts in Tristimulator</a></li>
+</ul>
+</nav>
+<main>
+<a name="color" id="color"></a>
+<h1>Set up colour with OpenColorIO</h1>
+<p>Each window has its own colour pipeline.</p>
+<ol>
+<li><p>Click the OpenColorIO button at the right end of the toolbar.</p><p>The colour pipeline opens in a popover. In full screen, the button is on the floating toolbar.</p></li>
+<li><p>Set any of the following:</p>
+<ul>
+<li><p><strong>Config:</strong> The OpenColorIO config. Browse for a file or reload the current path. A config inside the app is labelled “Built-in”, followed by the config name.</p></li>
+<li><p><strong>Source:</strong> The input colour space, or an inverse display and view that converts display-referred data back to scene data. Tristimulator tries to match the file’s colour metadata to a colour space in the config.</p></li>
+<li><p><strong>Working Space:</strong> The intermediate colour space.</p></li>
+<li><p><strong>Looks:</strong> Look transforms from an attached ACES Metadata File. This appears only when the AMF has looks.</p></li>
+<li><p><strong>Display:</strong> A display and view from the config, or ACES 2.0. ACES 2.0 sets limiting primaries and a peak in nits, and can follow the display’s current extended dynamic range headroom. This section also switches between the Metal GPU path and the OpenColorIO CPU reference. Video frames always use the GPU.</p></li>
+<li><p><strong>Screen:</strong> The Metal colour space used to show the image on the display.</p></li>
+</ul></li>
+</ol>
+<p>Settings you choose in a window override the default config for that window.</p>
+<section class="seealso"><h2>See also</h2><ul><li><a href="colordefaults.html">Change the default colour settings</a></li><li><a href="scopes.html">Show chromaticity diagrams</a></li><li><a href="opening.html">Open images, sequences, and movies</a></li></ul></section>
+<p class="contents-link"><a href="TristimulatorHelp.html">Table of Contents</a></p>
+</main>
+</div>
+</body>
+</html>

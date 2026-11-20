@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Open images, sequences, and movies</title>
+<meta name="description" content="Open stills, numbered image sequences, and movies in Tristimulator, open a second window, and attach an ACES Metadata File." />
+<meta name="keywords" content="launch, load, import, sidecar, document, double-click" />
+<link rel="stylesheet" href="../shrd/help.css" />
+</head>
+<body class="topic">
+<header class="bookbar"><a href="TristimulatorHelp.html"><img src="../shrd/icon32.png" alt="" width="20" height="20" />Tristimulator Help</a></header>
+<div class="layout">
+<nav class="toc" aria-label="Table of Contents">
+<h2>Get started</h2><ul>
+<li><a href="opening.html" class="current">Open images, sequences, and movies</a></li>
+<li><a href="formats.html">File formats Tristimulator can open</a></li>
+</ul>
+<h2>View images</h2><ul>
+<li><a href="viewing.html">Zoom and pan an image</a></li>
+<li><a href="exposure.html">Adjust exposure and view channels</a></li>
+<li><a href="info.html">Check image information and HDR</a></li>
+<li><a href="fullscreen.html">View an image in full screen</a></li>
+<li><a href="quicklook.html">Preview images in the Finder with Quick Look</a></li>
+</ul>
+<h2>Play movies and sequences</h2><ul>
+<li><a href="playback.html">Play movies and image sequences</a></li>
+</ul>
+<h2>Manage colour</h2><ul>
+<li><a href="color.html">Set up colour with OpenColorIO</a></li>
+<li><a href="colordefaults.html">Change the default colour settings</a></li>
+<li><a href="scopes.html">Show chromaticity diagrams</a></li>
+</ul>
+<h2>Copy and export</h2><ul>
+<li><a href="export.html">Copy or export an image</a></li>
+</ul>
+<h2>Reference</h2><ul>
+<li><a href="shortcuts.html">Keyboard shortcuts in Tristimulator</a></li>
+</ul>
+</nav>
+<main>
+<a name="open" id="open"></a>
+<h1>Open images, sequences, and movies</h1>
+<p>Each image, sequence, or movie you open gets its own window.</p>
+<h2>Open a file</h2>
+<ul>
+<li><p>In Tristimulator, choose <span class="ui">File</span> &gt; <span class="ui">Open</span>, select a file, then click <span class="ui">Open</span>.</p></li>
+<li><p>In the Finder, open the file with Tristimulator.</p></li>
+</ul>
+<p>If Tristimulator can’t read a file, it shows an error and the window stays empty.</p>
+
+<h2>Open an image sequence</h2>
+<p>Open any frame of the sequence. Tristimulator opens a still whose name ends in digits as a sequence when other files in the same folder share its name prefix and extension.</p>
+<p>For example, opening <code>shot_0001.exr</code> plays it with <code>shot_0002.exr</code> and the rest of that run. A numbered file with no matching files opens as a single still.</p>
+
+<h2>Open another window for the same file</h2>
+<p>Choose <span class="ui">File</span> &gt; <span class="ui">New Window for This Image</span> (or press Option-Command-N). The new window has its own OpenColorIO settings, so you can compare two colour pipelines side by side.</p>
+
+<h2>Attach an ACES Metadata File (AMF)</h2>
+<p>When you open an image, Tristimulator looks in the same folder for an <code>.amf</code> file with the same name, the same name without the frame number, or the only <code>.amf</code> file in that folder.</p>
+<p>To choose an AMF yourself, choose <span class="ui">File</span> &gt; <span class="ui">Load AMF</span>, then select the file.</p>
+<p>When an AMF is attached, the info bar shows an <span class="ui">AMF</span> button, and the colour pipeline offers the input, looks, and output from the file.</p>
+<section class="seealso"><h2>See also</h2><ul><li><a href="formats.html">File formats Tristimulator can open</a></li><li><a href="playback.html">Play movies and image sequences</a></li><li><a href="color.html">Set up colour with OpenColorIO</a></li></ul></section>
+<p class="contents-link"><a href="TristimulatorHelp.html">Table of Contents</a></p>
+</main>
+</div>
+</body>
+</html>

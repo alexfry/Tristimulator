@@ -1,0 +1,6 @@
+# actionlint 1.7.7 does not know the macos-26 hosted label yet.
+# macos-26 is the Apple Silicon image documented by actions/runner-images.
+self-hosted-runner:
+  labels:
+    - macos-26
+    - xcode-27

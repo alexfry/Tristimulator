@@ -1,0 +1,113 @@
+# Sign and notarize a Developer ID build, staple the DMG when that succeeds,
+# then attach the DMG to a draft GitHub Release. If stapling fails, the
+# notarized DMG is still uploaded and the draft is marked unstapled. A later
+# step fails the job. Triggered by a v* tag or by hand. See docs/CI.md.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create or update, for example v1.2.3"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  GIT_TERMINAL_PROMPT: "0"
+  VCPKG_MAX_CONCURRENCY: "2"
+
+jobs:
+  release:
+    name: Sign, notarize, and draft
+    runs-on: xcode-27
+    timeout-minutes: 210
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require release secrets
+        env:
+          DEVELOPER_ID_CERT_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 }}
+          DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: Scripts/ci_check_release_secrets.sh
+
+      - name: Resolve tag
+        id: tag
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: Scripts/ci_resolve_release_tag.sh
+
+      - name: Select Xcode 27.2
+        run: Scripts/ci_prepare_runner.sh
+
+      - name: Configure vcpkg binary cache
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = process.env.ACTIONS_CACHE_URL || "";
+            const token = process.env.ACTIONS_RUNTIME_TOKEN || "";
+            if (!url || !token) {
+              core.warning("GitHub Actions cache credentials are not visible. vcpkg will compile from source and will not use the binary cache.");
+              core.exportVariable("VCPKG_BINARY_SOURCES", "clear");
+              return;
+            }
+            core.exportVariable("ACTIONS_CACHE_URL", url);
+            core.exportVariable("ACTIONS_RUNTIME_TOKEN", token);
+            core.exportVariable("VCPKG_BINARY_SOURCES", "clear;x-gha,readwrite");
+            core.info("vcpkg binary cache: x-gha,readwrite");
+
+      - name: Build third-party libraries
+        run: Scripts/build_thirdparty.sh
+
+      - name: Check static libraries against the Xcode link line
+        run: Scripts/ci_verify_static_libs.sh
+
+      - name: Archive, sign, notarize, and staple
+        id: package
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          DEVELOPER_ID_CERT_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 }}
+          DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: Scripts/ci_release_package.sh
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tristimulator-${{ steps.package.outputs.tag }}${{ steps.package.outputs.stapled == 'false' && '-unstapled' || '' }}
+          path: ${{ steps.package.outputs.dmg }}
+          if-no-files-found: error
+
+      - name: Attach draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.package.outputs.tag }}
+          RELEASE_DMG: ${{ steps.package.outputs.dmg }}
+          RELEASE_SHA256: ${{ steps.package.outputs.checksum }}
+          RELEASE_STAPLED: ${{ steps.package.outputs.stapled }}
+        run: Scripts/ci_publish_draft_release.sh
+
+      - name: Fail if the DMG was not stapled
+        if: success() && steps.package.outputs.stapled != 'true'
+        run: |
+          printf '%s\n' '::error::Notarization was Accepted, but stapling failed. The DMG was uploaded and attached to a draft release marked unstapled. Do not publish that draft.'
+          exit 1

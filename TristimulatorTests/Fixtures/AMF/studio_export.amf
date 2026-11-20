@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE aces:acesMetadataFile>
+<aces:acesMetadataFile xmlns:aces="urn:ampas:aces:amf:v2.0" version="2.0" xsi:schemaLocation="urn:ampas:aces:amf:v2.0 file:acesMetadataFile.xsd" xmlns:cdl="urn:ASC:CDL:v1.01" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <aces:amfInfo>
+        <aces:description>ACES Frames CLF Export Repro, Timeline 1, Still, Exported by DaVinci Resolve</aces:description>
+        <aces:dateTime>
+            <aces:creationDateTime>2026-06-07T13:21:09Z</aces:creationDateTime>
+            <aces:modificationDateTime>2026-06-07T13:21:09Z</aces:modificationDateTime>
+        </aces:dateTime>
+        <aces:uuid>urn:uuid:0fa530ec-bb02-5e6e-8f22-4bfbc611ac3c</aces:uuid>
+    </aces:amfInfo>
+    <aces:clipId>
+        <aces:clipName>ACES_OT_VWG_SampleFrames</aces:clipName>
+        <aces:sequence min="1" max="81" idx="#">ACES_OT_VWG_SampleFrames.####.exr</aces:sequence>
+    </aces:clipId>
+    <aces:pipeline>
+        <aces:pipelineInfo>
+            <aces:dateTime>
+                <aces:creationDateTime>2026-06-07T13:21:09Z</aces:creationDateTime>
+                <aces:modificationDateTime>2026-06-07T13:21:09Z</aces:modificationDateTime>
+            </aces:dateTime>
+            <aces:uuid>urn:uuid:5ba520da-fef6-582b-8c6f-65033c5b0fd9</aces:uuid>
+            <aces:systemVersion>
+                <aces:majorVersion>2</aces:majorVersion>
+                <aces:minorVersion>0</aces:minorVersion>
+                <aces:patchVersion>0</aces:patchVersion>
+            </aces:systemVersion>
+        </aces:pipelineInfo>
+        <aces:lookTransform applied="false">
+            <aces:transformId>urn:ampas:aces:transformId:v2.0:Look.Academy.ReferenceGamutCompress.a2.v1</aces:transformId>
+        </aces:lookTransform>
+        <aces:workingLocation/>
+        <aces:lookTransform applied="false">
+            <aces:hash algorithm="http://www.w3.org/2001/04/xmldsig-more#md5">1c8a0155755b4899fa9d51020980fe20</aces:hash>
+            <aces:file>ACES_OT_VWG_SampleFrames_0001_0081_0_ClipGraph_CorrectorNode_1.clf</aces:file>
+        </aces:lookTransform>
+        <aces:lookTransform applied="false">
+            <aces:hash algorithm="http://www.w3.org/2001/04/xmldsig-more#md5">389775d851228e7aa0b95089b6164bd7</aces:hash>
+            <aces:file>ACES_OT_VWG_SampleFrames_0001_0081_0_ClipGraph_CorrectorNode_3.clf</aces:file>
+        </aces:lookTransform>
+        <aces:outputTransform applied="false">
+            <aces:transformId>urn:ampas:aces:transformId:v2.0:Output.Academy.P3-D65_1000nit_in_P3-D65_ST2084.a2.v1</aces:transformId>
+        </aces:outputTransform>
+    </aces:pipeline>
+</aces:acesMetadataFile>
