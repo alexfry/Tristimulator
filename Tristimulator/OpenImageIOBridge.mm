@@ -31,6 +31,17 @@
 #include <thread>
 
 using namespace OIIO;
+
+/// File metadata, layer names and library error text are not guaranteed to be
+/// valid UTF-8. +stringWithUTF8String: returns nil for invalid input, and nil
+/// in a collection literal or -addObject: throws. Never returns nil.
+static NSString *SafeNSString(const char *cstr) {
+    if (!cstr) return @"";
+    NSString *s = [NSString stringWithUTF8String:cstr];
+    if (s) return s;
+    s = [[NSString alloc] initWithCString:cstr encoding:NSISOLatin1StringEncoding];
+    return s ?: @"";
+}
 // OpenEXR v3 headers already define: namespace Imf = OPENEXR_IMF_NAMESPACE
 // and half lives in Imath, not Imf.
 
@@ -352,7 +363,7 @@ ReadEXRTextureDirectly(const char *filename,
         if (outError) {
             *outError = [NSError errorWithDomain:@"OpenEXRDirect" code:-1
                               userInfo:@{NSLocalizedDescriptionKey:
-                                  [NSString stringWithUTF8String:e.what()]}];
+                                  SafeNSString(e.what())}];
         }
         return nil;
     }
@@ -547,7 +558,7 @@ ReadEXRIntoTexture(const char *filename,
         if (outError) {
             *outError = [NSError errorWithDomain:@"OpenEXRDirect" code:-1
                               userInfo:@{NSLocalizedDescriptionKey:
-                                  [NSString stringWithUTF8String:e.what()]}];
+                                  SafeNSString(e.what())}];
         }
         return NO;
     }
@@ -708,7 +719,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
 
         // Color space
         auto cs = spec.get_string_attribute("oiio:ColorSpace", "Linear");
-        _colorSpace = [NSString stringWithUTF8String:cs.c_str()];
+        _colorSpace = SafeNSString(cs.c_str());
 
         // HDR flag
         _isHDR = (spec.format == TypeDesc::HALF  ||
@@ -721,8 +732,8 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         // Extra attributes
         NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
         for (const auto &param : spec.extra_attribs) {
-            NSString *key   = [NSString stringWithUTF8String:param.name().c_str()];
-            NSString *value = [NSString stringWithUTF8String:param.get_string().c_str()];
+            NSString *key   = SafeNSString(param.name().c_str());
+            NSString *value = SafeNSString(param.get_string().c_str());
             attrs[key] = value;
         }
         _attributes = [attrs copy];
@@ -735,7 +746,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
             if (layers.size() > 1) {
                 NSMutableArray *arr = [NSMutableArray arrayWithCapacity:layers.size()];
                 for (const auto &l : layers)
-                    [arr addObject:[NSString stringWithUTF8String:l.c_str()]];
+                    [arr addObject:SafeNSString(l.c_str())];
                 _layerNames = [arr copy];
             } else {
                 _layerNames = @[];
@@ -922,7 +933,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
             if (error) {
                 *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-1
                               userInfo:@{NSLocalizedDescriptionKey:
-                                  [NSString stringWithUTF8String:OIIO::geterror().c_str()]}];
+                                  SafeNSString(OIIO::geterror().c_str())}];
             }
             return nil;
         }
@@ -937,7 +948,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error) {
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-2
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:buf.geterror().c_str()]}];
+                              SafeNSString(buf.geterror().c_str())}];
         }
         return nil;
     }
@@ -950,7 +961,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error) {
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-3
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:rgba.geterror().c_str()]}];
+                              SafeNSString(rgba.geterror().c_str())}];
         }
         return nil;
     }
@@ -967,7 +978,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
             if (allLayers.size() > 1) {
                 layerNamesArr = [NSMutableArray arrayWithCapacity:allLayers.size()];
                 for (const auto &l : allLayers)
-                    [layerNamesArr addObject:[NSString stringWithUTF8String:l.c_str()]];
+                    [layerNamesArr addObject:SafeNSString(l.c_str())];
             }
         }
     }
@@ -1004,7 +1015,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error) {
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-1
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:OIIO::geterror().c_str()]}];
+                              SafeNSString(OIIO::geterror().c_str())}];
         }
         return nil;
     }
@@ -1023,7 +1034,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error) {
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-2
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:errMsg.c_str()]}];
+                              SafeNSString(errMsg.c_str())}];
         }
         return nil;
     }
@@ -1040,7 +1051,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error) {
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-3
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:rgba.geterror().c_str()]}];
+                              SafeNSString(rgba.geterror().c_str())}];
         }
         return nil;
     }
@@ -1089,13 +1100,13 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
             if (result.size() <= 1) return @[];
             NSMutableArray *arr = [NSMutableArray arrayWithCapacity:result.size()];
             for (const auto &l : result)
-                [arr addObject:[NSString stringWithUTF8String:l.c_str()]];
+                [arr addObject:SafeNSString(l.c_str())];
             return [arr copy];
         } catch (const std::exception &e) {
             if (error)
                 *error = [NSError errorWithDomain:@"OpenEXRDirect" code:-1
                               userInfo:@{NSLocalizedDescriptionKey:
-                                  [NSString stringWithUTF8String:e.what()]}];
+                                  SafeNSString(e.what())}];
             return nil;
         }
     }
@@ -1106,7 +1117,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error) {
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-1
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:OIIO::geterror().c_str()]}];
+                              SafeNSString(OIIO::geterror().c_str())}];
         }
         return nil;
     }
@@ -1115,7 +1126,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
     if (allLayers.size() <= 1) return @[];
     NSMutableArray *arr = [NSMutableArray arrayWithCapacity:allLayers.size()];
     for (const auto &l : allLayers)
-        [arr addObject:[NSString stringWithUTF8String:l.c_str()]];
+        [arr addObject:SafeNSString(l.c_str())];
     return [arr copy];
 }
 
@@ -1129,7 +1140,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error) {
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-1
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:OIIO::geterror().c_str()]}];
+                              SafeNSString(OIIO::geterror().c_str())}];
         }
         return nil;
     }
@@ -1145,7 +1156,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
     if (allLayers.size() > 1) {
         layerArr = [NSMutableArray arrayWithCapacity:allLayers.size()];
         for (const auto &l : allLayers)
-            [layerArr addObject:[NSString stringWithUTF8String:l.c_str()]];
+            [layerArr addObject:SafeNSString(l.c_str())];
     }
     OIIOImageSpec *result = [[OIIOImageSpec alloc] initWithImageSpec:spec
                                                           layerNames:layerArr];
@@ -1186,7 +1197,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error)
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-1
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:src.geterror().c_str()]}];
+                              SafeNSString(src.geterror().c_str())}];
         return nil;
     }
 
@@ -1286,7 +1297,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error) {
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-3
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:buf.geterror().c_str()]}];
+                              SafeNSString(buf.geterror().c_str())}];
         }
         return NO;
     }
@@ -1319,14 +1330,14 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error)
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-5
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:OIIO::geterror().c_str()]}];
+                              SafeNSString(OIIO::geterror().c_str())}];
         return NO;
     }
     if (!out->open([path UTF8String], spec)) {
         if (error)
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-6
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:out->geterror().c_str()]}];
+                              SafeNSString(out->geterror().c_str())}];
         return NO;
     }
     bool ok = out->write_image(TypeDesc::FLOAT, data.bytes);
@@ -1336,7 +1347,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error)
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-7
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:writeErr.c_str()]}];
+                              SafeNSString(writeErr.c_str())}];
         return NO;
     }
     return YES;
@@ -1346,7 +1357,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
     std::string formats;
     getattribute("extension_list", formats);
     NSMutableArray *result = [NSMutableArray array];
-    NSString *str = [NSString stringWithUTF8String:formats.c_str()];
+    NSString *str = SafeNSString(formats.c_str());
     for (NSString *component in [str componentsSeparatedByString:@";"]) {
         NSArray *parts = [component componentsSeparatedByString:@":"];
         if (parts.count > 1)
@@ -1391,7 +1402,7 @@ static ImageBuf ExtractLayerRGBA(const ImageBuf &src, const std::string &layer) 
         if (error) {
             *error = [NSError errorWithDomain:@"OpenImageIOBridge" code:-4
                           userInfo:@{NSLocalizedDescriptionKey:
-                              [NSString stringWithUTF8String:dstBuf.geterror().c_str()]}];
+                              SafeNSString(dstBuf.geterror().c_str())}];
         }
         return nil;
     }
