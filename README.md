@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshot.jpg" alt="Tristimulator showing an ACES sample frame with CIE 1931 Yxy, CIE 1976 u'v' and JMh chromaticity diagrams over the image" width="720">
+  <img src="docs/images/screenshot.png" alt="Tristimulator showing an ACES sample frame with CIE 1931 Yxy, CIE 1976 u'v' and JMh chromaticity diagrams over the image" width="720">
 </p>
 
 ## Features
