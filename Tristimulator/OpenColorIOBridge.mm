@@ -909,22 +909,22 @@ static void buildRGBtoXYZ_D65(double Rx, double Ry,
             const char* textureName = nullptr;
             const char* samplerName = nullptr;
             unsigned width = 0, height = 0;
-            OCIO::GpuShaderDesc::TextureType textureType;
-            OCIO::GpuShaderDesc::TextureDimensions channels;
+            OCIO::GpuShaderDesc::TextureType channelKind;        // RED or RGB
+            OCIO::GpuShaderDesc::TextureDimensions dimensions;   // 1D or 2D
             OCIO::Interpolation interpolation;
 
-            desc->getTexture(i, textureName, samplerName, width, height, textureType, channels, interpolation);
+            desc->getTexture(i, textureName, samplerName, width, height, channelKind, dimensions, interpolation);
 
             const float* values = nullptr;
             desc->getTextureValues(i, values);
 
             if (values) {
-                unsigned channelCount = (channels == OCIO::GpuShaderDesc::TEXTURE_RGB_CHANNEL) ? 3 : 1;
+                unsigned channelCount = (channelKind == OCIO::GpuShaderDesc::TEXTURE_RGB_CHANNEL) ? 3 : 1;
                 size_t dataSize = width * height * channelCount * sizeof(float);
                 NSLog(@"🔎 OCIO texture[%u] '%s': dims=%d (%@) width=%u height=%u dataSize=%zu",
                       i, textureName,
-                      (int)channels,
-                      (channels == OCIO::GpuShaderDesc::TEXTURE_RGB_CHANNEL) ? @"RGB" : @"RED",
+                      (int)dimensions,
+                      (channelKind == OCIO::GpuShaderDesc::TEXTURE_RGB_CHANNEL) ? @"RGB" : @"RED",
                       width, height, dataSize);
                 NSData *data = [NSData dataWithBytes:values length:dataSize];
                 NSString *typeStr = (height == 1) ? @"1D" : @"2D";
@@ -935,7 +935,7 @@ static void buildRGBtoXYZ_D65(double Rx, double Ry,
                     @"width":       @(width),
                     @"height":      @(height),
                     @"channels":    @(channelCount),
-                    @"channelType": (channels == OCIO::GpuShaderDesc::TEXTURE_RGB_CHANNEL) ? @"RGB" : @"RED",
+                    @"channelType": (channelKind == OCIO::GpuShaderDesc::TEXTURE_RGB_CHANNEL) ? @"RGB" : @"RED",
                     @"type":        typeStr,
                     @"data":        data
                 }];
@@ -1107,11 +1107,11 @@ static void buildRGBtoXYZ_D65(double Rx, double Ry,
             const char* samplerName = nullptr;
             unsigned width = 0;
             unsigned height = 0;
-            OCIO::GpuShaderDesc::TextureType textureType;
-            OCIO::GpuShaderDesc::TextureDimensions channels; // Number of channels
+            OCIO::GpuShaderDesc::TextureType channelKind;        // RED or RGB
+            OCIO::GpuShaderDesc::TextureDimensions dimensions;   // 1D or 2D
             OCIO::Interpolation interpolation;
             
-            shaderDescriptor->getTexture(i, textureName, samplerName, width, height, textureType, channels, interpolation);
+            shaderDescriptor->getTexture(i, textureName, samplerName, width, height, channelKind, dimensions, interpolation);
             
             // Get the texture values
             const float* values = nullptr;
@@ -1119,7 +1119,7 @@ static void buildRGBtoXYZ_D65(double Rx, double Ry,
             
             if (values) {
                 // Convert TextureDimensions to actual channel count
-                unsigned channelCount = (channels == OCIO::GpuShaderDesc::TEXTURE_RGB_CHANNEL) ? 3 : 1;
+                unsigned channelCount = (channelKind == OCIO::GpuShaderDesc::TEXTURE_RGB_CHANNEL) ? 3 : 1;
                 size_t dataSize = width * height * channelCount * sizeof(float);
                 NSData *data = [NSData dataWithBytes:values length:dataSize];
                 
