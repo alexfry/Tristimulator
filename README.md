@@ -14,16 +14,17 @@
 
 ## Features
 
-- Opens OpenEXR, including multilayer files with a layer menu, plus DPX, Cineon, Radiance HDR, TIFF, PNG, JPEG, HEIC, JPEG XL and more through OpenImageIO. FITS and DICOM files open too.
-- Plays QuickTime and MPEG-4 movies and image sequences, with frame stepping, scrubbing and looping. Sequences play at 12 to 60 fps.
+- Opens OpenEXR, including multilayer files with a layer menu, plus DPX, Cineon, Radiance HDR, TIFF, PNG, JPEG, HEIC, JPEG XL and more through OpenImageIO.
+- Plays Image Sequences, QuickTimes and MPEG-4 movies, with frame stepping, scrubbing and looping. Realtime EXR playback with modern SSDs.
 - Each window has its own OpenColorIO pipeline: config, source colour space, working space, display and view. Open a second window on the same file to compare two pipelines side by side.
-- ACES 2.0 display rendering with limiting primaries and a peak in nits. The peak can follow the display's current EDR headroom.
+- ACES 2.0 display rendering with limiting primaries and peak nits. The peak can follow the display's current EDR headroom.
+- Python scripting interface for studio specific OCIO workflows. 
 - ACES Metadata File (AMF) support. A matching `.amf` next to the image is found automatically, or you can load one yourself.
 - Shows extended dynamic range on displays that support it. The toolbar reports HDR or SDR for the current display, with EDR details and a peak measurement of the image on screen.
 - Exposure from -10 to +10 stops, and single-channel views for red, green, blue, alpha and luminance.
 - CIE 1931 Yxy, CIE 1976 u'v' and JMh chromaticity diagrams drawn over the image.
 - Copy or export an image with its OpenColorIO processing as an HDR gain-map HEIC or JPEG, with an UltraHDR option for JPEG.
-- A Quick Look extension that previews OpenEXR files in the Finder.
+- A Quick Look extension that previews OpenEXR files in the Finder, with Dynamic ACES 2.0 rendering following availible EDR headroom..
 
 The help book in `Help/Tristimulator.help` lists the supported file types and keyboard shortcuts.
 
