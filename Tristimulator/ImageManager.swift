@@ -760,8 +760,8 @@ class ImageManager {
 
         // One compiled kernel: source → scene_linear → ×exp2(exposure) → display/view
         // Compilation runs on a background thread (Metal shader compile can take 100-500ms).
-        // Metal is thread-safe for pipeline compilation; a benign nil read in draw() just
-        // skips the inline OCIO path for one frame while the new pipeline is being built.
+        // OCIOGPUProcessor serialises setups and coalesces queued ones (latest wins); draw()
+        // keeps using the previous pipeline snapshot until the new one is published.
         let capturedGpu = gpu
         let capturedConfig = config
         let compileSource = sourceSpace
@@ -777,30 +777,34 @@ class ImageManager {
         // every frame (and persist across a sequence). Computed on the main actor here.
         let capturedLookSteps = amfGPULookSteps()
         let capturedLookSig = lookSig(capturedLookSteps)
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+        let compiled = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Bool, Error>) in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
+                    let ran: Bool
                     if useInverseDisplay {
-                        try capturedGpu.setupCombinedInverseDisplayTransform(
+                        ran = try capturedGpu.setupCombinedInverseDisplayTransform(
                             config: capturedConfig,
                             inverseDisplay: invDisplay,
                             inverseView: invView,
                             display: compileDisplay,
                             view: compileView)
                     } else {
-                        try capturedGpu.setupCombinedTransform(
+                        ran = try capturedGpu.setupCombinedTransform(
                             config: capturedConfig,
                             sourceSpace: compileSource,
                             display: compileDisplay,
                             view: compileView,
                             lookSteps: capturedLookSteps)
                     }
-                    cont.resume()
+                    cont.resume(returning: ran)
                 } catch {
                     cont.resume(throwing: error)
                 }
             }
         }
+        // A newer transform request superseded this one before it compiled; that request
+        // will commit its own state, so don't overwrite it with these stale parameters.
+        guard compiled else { return }
 
         // Video frames: inline draw() renderer handles all GPU work — processTexture would
         // hold the CVMetalTexture alive inside the GPU command buffer, starving AVFoundation's
@@ -941,8 +945,8 @@ class ImageManager {
 
             // Only rebuild the OCIO processor and recompile the shader when something changed.
             // Compilation runs on a background thread — OCIO C++ + Metal pipeline compile can
-            // take 100-500ms per pass.  Metal is thread-safe for pipeline creation; a nil read
-            // of pipelineState in draw() during compilation safely skips inline OCIO for one frame.
+            // take 100-500ms per pass.  OCIOGPUProcessor runs one setup at a time and coalesces
+            // queued ones (latest wins); draw() keeps the previous snapshot until the new one lands.
             let cacheSourceKey = useInverseDisplay ? "inv(\(invDisplay)/\(invView))" : sourceSpace
             if !gpu.isACES2PipelineReady(sourceSpace: cacheSourceKey, peakNits: peakNits, gamutTag: dynamicACES2Gamut.rawValue, lookSig: aces2LookSig) {
                 let edrHeadroom = (currentScreen ?? NSScreen.main)?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1.0
@@ -960,16 +964,17 @@ class ImageManager {
                 let capturedInvDisplay       = invDisplay
                 let capturedInvView          = invView
                 let capturedLookSteps        = aces2LookSteps
-                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                let compiled = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Bool, Error>) in
                     DispatchQueue.global(qos: .userInitiated).async {
                         do {
+                            let ran: Bool
                             let aces2Proc = try OCIOProcessor.makeDynamicACES2Processor(
                                 config: capturedConfig,
                                 sourceSpace: capturedLinearSpace,
                                 peakNits: capturedTargetNits,
                                 outputGamutXY: capturedGamutXY)
                             if capturedUseInverse {
-                                try capturedGpu.setupCombinedInverseDisplayACES2Transform(
+                                ran = try capturedGpu.setupCombinedInverseDisplayACES2Transform(
                                     config: capturedConfig,
                                     inverseDisplay: capturedInvDisplay,
                                     inverseView: capturedInvView,
@@ -977,7 +982,7 @@ class ImageManager {
                                     gamutTag: capturedGamutTag,
                                     aces2Processor: aces2Proc)
                             } else {
-                                try capturedGpu.setupCombinedACES2Transform(
+                                ran = try capturedGpu.setupCombinedACES2Transform(
                                     config: capturedConfig,
                                     sourceSpace: capturedSourceSpace,
                                     peakNits: capturedPeakNits,
@@ -985,12 +990,15 @@ class ImageManager {
                                     aces2Processor: aces2Proc,
                                     lookSteps: capturedLookSteps)
                             }
-                            cont.resume()
+                            cont.resume(returning: ran)
                         } catch {
                             cont.resume(throwing: error)
                         }
                     }
                 }
+                // Superseded by a newer request (e.g. a later headroom tick) before compiling.
+                // Leave dynamicACES2PeakNits / lastKnownEDR for that request to commit.
+                guard compiled else { return }
             }
 
             // Video frames: inline draw() handles all GPU work. processTexture would hold
