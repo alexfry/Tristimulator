@@ -14,7 +14,7 @@
 
 ## Features
 
-- Opens OpenEXR, including multilayer files with a layer menu, plus DPX, Cineon, Radiance HDR, TIFF, PNG, JPEG, HEIC, JPEG XL and more through OpenImageIO.
+- Opens OpenEXR, including multilayer files, plus DPX, Cineon, Radiance HDR, TIFF, PNG, JPEG, HEIC, JPEG XL and more through OpenImageIO.
 - Plays Image Sequences, QuickTimes and MPEG-4 movies, with frame stepping, scrubbing and looping. Realtime EXR playback with modern SSDs.
 - Each window has its own OpenColorIO pipeline: config, source colour space, working space, display and view. Open a second window on the same file to compare two pipelines side by side.
 - ACES 2.0 display rendering with limiting primaries and peak nits. The peak can follow the display's current EDR headroom.
