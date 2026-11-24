@@ -304,6 +304,11 @@ enum TristimulatorDefaults {
     /// area as the window is resized. False (default) pins them to the nearer
     /// edges at a fixed size.
     static let scopesScaleWithWindow = "ScopesScaleWithWindow"
+    /// When true, a newly opened image whose colour space tag matches an SDR display
+    /// colour space (e.g. "sRGB - Display") starts in Inverse Display mode, inverting that
+    /// display's SDR view instead of converting from the display colour space.
+    /// Missing or false (default) keeps Color Space mode.
+    static let inverseDisplayForDisplayReferred = "InverseDisplayForDisplayReferred"
 }
 
 enum TristimulatorHelpBook {

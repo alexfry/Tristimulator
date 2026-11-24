@@ -65,6 +65,21 @@ NS_ASSUME_NONNULL_BEGIN
 /// Get all look names defined in the config
 - (NSArray<NSString *> *)lookNames;
 
+/// Display colour space a display/view pair renders into. Resolves the
+/// `<USE_DISPLAY_NAME>` placeholder used by shared views to the display name.
+/// Returns nil if the pair does not exist.
+- (nullable NSString *)displayColorSpaceForDisplay:(NSString *)display view:(NSString *)view;
+
+/// View transform used by a display/view pair, or an empty string when the view
+/// has none (e.g. a plain colour space view such as "Raw").
+- (NSString *)viewTransformForDisplay:(NSString *)display view:(NSString *)view;
+
+/// True when the named colour space is display-referred (listed under `display_colorspaces`).
+- (BOOL)isDisplayReferredColorSpace:(NSString *)colorSpaceName;
+
+/// The colour space's `encoding` attribute (e.g. "sdr-video", "hdr-video"), or an empty string.
+- (NSString *)encodingForColorSpace:(NSString *)colorSpaceName;
+
 @end
 
 /// Represents an OCIO processor for transforming image data

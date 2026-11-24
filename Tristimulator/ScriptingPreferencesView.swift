@@ -129,6 +129,8 @@ struct OCIOPreferencesPane: View {
 
     @State private var configMode: OCIOConfigMode = .builtIn
     @State private var customPath = ""
+    @AppStorage(TristimulatorDefaults.inverseDisplayForDisplayReferred)
+    private var inverseDisplayForDisplayReferred = false
 
     private let builtInName = "studio-config-v4.0.0_aces-v2.0_ocio-v2.5.ocio"
 
@@ -191,6 +193,14 @@ struct OCIOPreferencesPane: View {
                 }
 
                 Text("The default config for newly opened images. Per-window overrides in the color pipeline take precedence.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Display-Referred Images") {
+                Toggle("Use inverse output transforms for display-referred images",
+                       isOn: $inverseDisplayForDisplayReferred)
+                Text("When on, a newly opened image tagged with an SDR display colour space, such as sRGB or Display P3, is brought into scene-linear by inverting that display's SDR view (for example ACES 2.0 SDR 100 nits) instead of converting from the display colour space. HDR, PQ and HLG images are not affected. Saved per-image settings and scripting rules take precedence.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

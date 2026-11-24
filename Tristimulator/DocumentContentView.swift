@@ -1281,11 +1281,13 @@ struct DocumentContentView: View {
         isRestoringSettings = false
 
         // Always try to match the new image's color space
+        var tagMatchedSpace: String?
         if let metadata = document.imageManager.currentImage?.metadata {
             let imageColorSpace = metadata.colorSpace
             if !imageColorSpace.isEmpty,
                let matchedSpace = ColorSpaceAliases.findMatch(for: imageColorSpace, in: colorSpaces) {
                 document.selectedSourceSpace = matchedSpace
+                tagMatchedSpace = matchedSpace
                 print("🎯 Re-matched new image color space '\(imageColorSpace)' to '\(matchedSpace)'")
             }
         }
@@ -1302,6 +1304,12 @@ struct DocumentContentView: View {
             print("📌 Set default source space: \(document.selectedSourceSpace)")
         } else {
             print("ℹ️ Keeping existing source space: \(document.selectedSourceSpace)")
+        }
+
+        // Preference: bring display-referred images in through an inverse output transform.
+        // Off by default; this block then changes nothing.
+        if UserDefaults.standard.bool(forKey: InverseDisplaySelection.preferenceKey) {
+            applyInverseDisplayPreference(tagMatchedSpace: tagMatchedSpace)
         }
         
         // Keep dest space as-is (working space shouldn't change when loading new images)
@@ -1389,6 +1397,39 @@ struct DocumentContentView: View {
         } else {
             print("⚠️ No current image to transform")
         }
+    }
+
+    /// With the "inverse output transform for display-referred images" preference on,
+    /// choose the source mode for a newly opened image that has no saved settings.
+    /// If the tag matched an SDR display colour space with an invertible SDR view, use
+    /// Inverse Display mode on that display/view; otherwise use Color Space mode.
+    /// Scripting overrides run later and still win.
+    private func applyInverseDisplayPreference(tagMatchedSpace: String?) {
+        let manager = document.imageManager
+        guard let config = manager.ocioConfig else { return }
+
+        guard let space = tagMatchedSpace,
+              let target = InverseDisplaySelection.target(
+                  for: space, in: InverseDisplayConfigQuery(config: config))
+        else {
+            manager.sourceTransformMode = .colorspace
+            return
+        }
+
+        do {
+            // Build the inverse once up front so a non-invertible view falls back cleanly.
+            _ = try OCIOProcessor.makeInverseDisplayProcessor(
+                config: config, display: target.display, view: target.view)
+        } catch {
+            print("⚠️ Inverse display preference: inv(\(target.display)/\(target.view)) failed to build (\(error.localizedDescription)); staying in Color Space mode for '\(space)'")
+            manager.sourceTransformMode = .colorspace
+            return
+        }
+
+        manager.sourceInverseDisplay = target.display
+        manager.sourceInverseView = target.view
+        manager.sourceTransformMode = .inverseDisplay
+        print("🔁 Inverse display preference: '\(space)' → inv(\(target.display)/\(target.view))")
     }
 
     /// Compile the OCIO GPU pipeline for the current settings, then reveal the image
