@@ -12,27 +12,110 @@ import AppKit
 class OCIOGPUProcessor {
     private let device: MTLDevice
     private var commandQueue: MTLCommandQueue?
-    private var pipelineState: MTLComputePipelineState?
-    
-    // Store textures in the exact order OCIO provides them.
-    // orderedTextures is kept for binding; orderedTextureInfos carries name + texture.
-    private var orderedTextures: [MTLTexture] = []
-    private var orderedTextureInfos: [TextureInfo] = []
-    
-    private var cachedSourceSpace: String?
-    private var cachedDisplay: String?
-    private var cachedView: String?
-    private var cachedIsCombined: Bool = false
-    /// Signature of the AMF look steps folded into the combined display shader, so the
-    /// pipeline rebuilds when looks are toggled on/off.
-    private var cachedLookSig: String = ""
 
-    // Cache key for the combined ACES2 pass (separate from the normal display-transform cache)
-    private var cachedACES2SourceSpace: String?
-    private var cachedACES2PeakNits: Float = -1
-    private var cachedACES2GamutTag: String = ""
-    /// Signature of AMF look steps folded into the ACES2 combined pass.
-    private var cachedACES2LookSig: String = ""
+    // MARK: - Compiled pipeline state (thread-safe)
+    //
+    // Setup runs on background compile threads while the MTKView draw callback reads the
+    // pipeline on its own thread. The compute pipeline, its LUT textures (in binding order)
+    // and the parameters it was built for therefore travel together as one immutable
+    // snapshot, swapped under `stateLock`. Readers take one snapshot and use only that, so
+    // they see the complete old pipeline, the complete new one, or nil — never a torn pair.
+    // See GitHub issue #1 and P0-3 in CODEBASE_ASSESSMENT.md.
+
+    /// What a compiled pipeline was built for. Replaces the old per-field `cached*` vars;
+    /// a setup call is a cache hit when the current snapshot's key equals its own.
+    private enum PipelineKey: Equatable {
+        case uncached
+        case linearize(sourceSpace: String)
+        case display(sourceSpace: String, display: String, view: String)
+        /// `lookSig` is the signature of the AMF look steps folded into the display shader.
+        case combined(sourceSpace: String, display: String, view: String, lookSig: String)
+        case combinedInverse(syntheticSource: String, display: String, view: String)
+        /// Combined Dynamic ACES2 pass (normal or inverse-display source).
+        case aces2(sourceSpace: String, peakNits: Float, gamutTag: String, lookSig: String)
+    }
+
+    private struct PipelineSnapshot {
+        let pipelineState: MTLComputePipelineState
+        /// LUT textures in kernel binding order.
+        let textures: [MTLTexture]
+        /// Same textures with their OCIO names (for debug readback).
+        let textureInfos: [TextureInfo]
+        var key: PipelineKey = .uncached
+    }
+
+    /// Guards `_snapshot` and `setupGeneration`. Held only for pointer-sized swaps.
+    private let stateLock = NSLock()
+    private var _snapshot: PipelineSnapshot?
+    private var setupGeneration: UInt64 = 0
+    /// Held for the whole of a setup call: at most one compile at a time per processor,
+    /// and the cache check is atomic with the compile it guards.
+    private let compileLock = NSLock()
+    /// Retired snapshots (and their Metal LUT textures) are released here, on one serial
+    /// queue, once nothing — including in-flight command buffers — still references them.
+    private static let releaseQueue = DispatchQueue(label: "Tristimulator.OCIOGPUProcessor.release",
+                                                    qos: .utility)
+
+    private var currentSnapshot: PipelineSnapshot? {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return _snapshot
+    }
+
+    /// Atomically install `new` (or nil) and hand the previous snapshot to `releaseQueue`.
+    private func publish(_ new: PipelineSnapshot?) {
+        stateLock.lock()
+        let old = _snapshot
+        _snapshot = new
+        stateLock.unlock()
+        if let old { OCIOGPUProcessor.retire(old) }
+    }
+
+    private static func retire(_ snapshot: PipelineSnapshot) {
+        releaseQueue.async { withExtendedLifetime(snapshot) {} }
+    }
+
+    /// Keep `snapshot` alive until the GPU has finished `commandBuffer`, then release it
+    /// on `releaseQueue`. Must be called before the command buffer is committed.
+    private func retainUntilCompleted(_ snapshot: PipelineSnapshot, by commandBuffer: MTLCommandBuffer) {
+        commandBuffer.addCompletedHandler { _ in OCIOGPUProcessor.retire(snapshot) }
+    }
+
+    /// Run one pipeline setup request.
+    ///
+    /// - Only one setup runs at a time per processor (`compileLock`).
+    /// - Requests that pile up behind a running compile are coalesced: only the most
+    ///   recently issued one runs; older ones return without compiling because a newer
+    ///   request supersedes them. The latest request is never dropped.
+    /// - While a compile runs, readers keep using the previous snapshot. If setup throws,
+    ///   the pipeline is cleared, as before.
+    /// - Returns: `false` if this request was superseded and nothing was compiled. The
+    ///   caller should then not commit state for it; the newer request will.
+    @discardableResult
+    private func runSetup(_ name: String, _ body: () throws -> Void) throws -> Bool {
+        stateLock.lock()
+        setupGeneration &+= 1
+        let ticket = setupGeneration
+        stateLock.unlock()
+
+        compileLock.lock()
+        defer { compileLock.unlock() }
+
+        stateLock.lock()
+        let superseded = ticket != setupGeneration
+        stateLock.unlock()
+        if superseded {
+            print("⏭️ \(name): superseded by a newer setup request, skipping compile")
+            return false
+        }
+
+        do {
+            try body()
+            return true
+        } catch {
+            publish(nil)
+            throw error
+        }
+    }
 
     // Raw float data from OCIO for each 1D LUT — used by CPU-side LUT sampling
     // to verify what the GPU shader should be computing.
@@ -62,7 +145,7 @@ class OCIOGPUProcessor {
     /// from a named LUT texture (works for .private storage).
     /// Returns interleaved RGBA floats (4 per texel) regardless of storage format.
     func readLUTTexels(named name: String, startIndex: Int, count: Int) -> [Float]? {
-        guard let info = orderedTextureInfos.first(where: { $0.name == name }) else { return nil }
+        guard let info = currentSnapshot?.textureInfos.first(where: { $0.name == name }) else { return nil }
         let tex = info.texture
         // Always read back as RGBA (all LUT textures are rgba32Float after the upload fix)
         let bytesPerTexel = 4 * MemoryLayout<Float>.size
@@ -107,30 +190,21 @@ class OCIOGPUProcessor {
                 "No scene_linear role in OCIO config — cannot build linearize pre-pass")
         }
 
-        // Sentinel values that won't collide with real display/view names.
-        let sentinelDisplay = "__linearize__"
-        let sentinelView   = "__linearize__"
-        if cachedSourceSpace == sourceSpace &&
-           cachedDisplay == sentinelDisplay &&
-           !cachedIsCombined &&
-           pipelineState != nil {
-            return linearSpaceName
+        let key = PipelineKey.linearize(sourceSpace: sourceSpace)
+        try runSetup("Linearize") {
+            if currentSnapshot?.key == key { return }
+
+            print("🔧 Setting up linearize GPU pass: \(sourceSpace) → \(linearSpaceName)")
+            rawLUTs.removeAll()
+
+            let (processor, _) = try OCIOProcessor.makeLinearizeProcessor(
+                config: config, sourceSpace: sourceSpace)
+            var snapshot = try setupWithOCIOProcessor(processor)
+            snapshot.key = key
+            publish(snapshot)
+
+            print("✅ Linearize GPU pass ready: \(sourceSpace) → \(linearSpaceName)")
         }
-
-        print("🔧 Setting up linearize GPU pass: \(sourceSpace) → \(linearSpaceName)")
-        rawLUTs.removeAll()
-        pipelineState = nil
-        self.orderedTextures = []
-
-        let (processor, _) = try OCIOProcessor.makeLinearizeProcessor(
-            config: config, sourceSpace: sourceSpace)
-        try setupWithOCIOProcessor(processor)
-
-        cachedSourceSpace = sourceSpace
-        cachedDisplay     = sentinelDisplay
-        cachedView        = sentinelView
-
-        print("✅ Linearize GPU pass ready: \(sourceSpace) → \(linearSpaceName)")
         return linearSpaceName
     }
 
@@ -141,57 +215,44 @@ class OCIOGPUProcessor {
         display: String,
         view: String
     ) throws {
-        // Check if we already have this transform cached
-        if cachedSourceSpace == sourceSpace &&
-           cachedDisplay == display &&
-           cachedView == view &&
-           !cachedIsCombined &&
-           pipelineState != nil {
-            return // Already set up
+        let key = PipelineKey.display(sourceSpace: sourceSpace, display: display, view: view)
+        try runSetup("Display transform") {
+            // Check if we already have this transform cached
+            if currentSnapshot?.key == key { return }
+
+            print("🔧 Setting up Metal OCIO GPU transform...")
+            rawLUTs.removeAll()
+
+            // Create OCIO processor for display transform
+            let processor = try OCIOProcessor.makeDisplayProcessor(
+                config: config,
+                sourceSpace: sourceSpace,
+                display: display,
+                view: view
+            )
+
+            // Shared extraction + compilation
+            var snapshot = try setupWithOCIOProcessor(processor)
+            snapshot.key = key
+            publish(snapshot)
+
+            print("✅ Metal OCIO GPU transform ready")
         }
-        
-        print("🔧 Setting up Metal OCIO GPU transform...")
-        rawLUTs.removeAll()
-        
-        // Invalidate current state immediately so processTexture returns nil
-        // (not stale results) if setup fails or is called mid-compile.
-        pipelineState = nil
-        self.orderedTextures = []
-        
-        // Create OCIO processor for display transform
-        let processor = try OCIOProcessor.makeDisplayProcessor(
-            config: config,
-            sourceSpace: sourceSpace,
-            display: display,
-            view: view
-        )
-        
-        // Shared extraction + compilation
-        try setupWithOCIOProcessor(processor)
-        
-        // Cache this configuration
-        cachedSourceSpace = sourceSpace
-        cachedDisplay = display
-        cachedView = view
-        
-        print("✅ Metal OCIO GPU transform ready")
     }
 
     /// Setup the GPU pipeline from an already-created OCIOProcessor.
     /// Used by both `setupDisplayTransform` (via OCIO display/view) and
     /// `setupDynamicACES2Transform` (via a programmatic GroupTransform).
-    /// Clears rawLUTs and pipeline state before extracting shader + textures.
+    /// Clears rawLUTs before extracting shader + textures.
     func setupDynamicACES2Transform(_ processor: OCIOProcessor) throws {
-        print("🔧 Setting up Metal ACES2 dynamic GPU transform...")
-        rawLUTs.removeAll()
-        pipelineState = nil
-        self.orderedTextures = []
-        // Never cache: peak nits can change every call
-        cachedSourceSpace = nil
-        cachedDisplay = nil
-        cachedView = nil
-        try setupWithOCIOProcessor(processor)
-        print("✅ Metal ACES2 dynamic GPU transform ready")
+        try runSetup("Dynamic ACES2") {
+            print("🔧 Setting up Metal ACES2 dynamic GPU transform...")
+            rawLUTs.removeAll()
+            // Never cache: peak nits can change every call
+            let snapshot = try setupWithOCIOProcessor(processor)
+            publish(snapshot)
+            print("✅ Metal ACES2 dynamic GPU transform ready")
+        }
     }
 
     /// Setup combined GPU pipeline for Dynamic ACES2:
@@ -202,30 +263,36 @@ class OCIOGPUProcessor {
     /// - Parameter lookSteps: optional AMF look steps (ACES2065-1 in/out) inserted as a
     ///   middle pass (scene_linear → ACES2065-1 → looks → scene_linear) before the ACES2
     ///   output transform, so AMF looks apply in Dynamic ACES2 mode and persist per-frame.
+    @discardableResult
     func setupCombinedACES2Transform(config: OCIOConfig,
                                      sourceSpace: String,
                                      peakNits: Float,
                                      gamutTag: String,
                                      aces2Processor: OCIOProcessor,
-                                     lookSteps: [[String: String]] = []) throws {
+                                     lookSteps: [[String: String]] = []) throws -> Bool {
+        return try runSetup("Combined ACES2") {
+            try setupCombinedACES2TransformLocked(config: config, sourceSpace: sourceSpace,
+                                                  peakNits: peakNits, gamutTag: gamutTag,
+                                                  aces2Processor: aces2Processor, lookSteps: lookSteps)
+        }
+    }
+
+    private func setupCombinedACES2TransformLocked(config: OCIOConfig,
+                                                   sourceSpace: String,
+                                                   peakNits: Float,
+                                                   gamutTag: String,
+                                                   aces2Processor: OCIOProcessor,
+                                                   lookSteps: [[String: String]]) throws {
         let lookSig = lookSteps.map { $0.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "|") }
             .joined(separator: ";")
+        let key = PipelineKey.aces2(sourceSpace: sourceSpace, peakNits: peakNits,
+                                    gamutTag: gamutTag, lookSig: lookSig)
         // Cache hit: same source space, peak nits, gamut and looks — already compiled.
-        if cachedACES2SourceSpace == sourceSpace &&
-           cachedACES2PeakNits == peakNits &&
-           cachedACES2GamutTag == gamutTag &&
-           cachedACES2LookSig == lookSig &&
-           pipelineState != nil { return }
+        if currentSnapshot?.key == key { return }
 
         print("🔧 Setting up combined ACES2 GPU transform: \(sourceSpace) → [linear] → ACES2"
               + (lookSteps.isEmpty ? "" : " (+\(lookSteps.count) AMF look step(s))"))
         rawLUTs.removeAll()
-        pipelineState = nil
-        orderedTextures = []
-        cachedSourceSpace = nil
-        cachedDisplay = nil
-        cachedView = nil
-        cachedIsCombined = false
 
         let (linProc, linSpace) = try OCIOProcessor.makeLinearizeProcessor(
             config: config, sourceSpace: sourceSpace)
@@ -265,30 +332,26 @@ class OCIOGPUProcessor {
             }
         }
 
+        var snapshot: PipelineSnapshot
         do {
-            try compileCombinedShader(linCode: linCode, dispCode: dispCode,
-                                      linTextures: reoLin, dispTextures: reoDisp,
-                                      lookCode: lookCode, lookTextures: reoLook)
+            snapshot = try compileCombinedShader(linCode: linCode, dispCode: dispCode,
+                                                 linTextures: reoLin, dispTextures: reoDisp,
+                                                 lookCode: lookCode, lookTextures: reoLook)
         } catch {
             // Never leave the pipeline blank because a look-shader failed to build —
             // fall back to the no-look ACES2 pass so the image still renders.
             print("⚠️ ACES2 look-shader compile failed (\(error)); falling back to no-look ACES2 pass")
-            try compileCombinedShader(linCode: linCode, dispCode: dispCode,
-                                      linTextures: reoLin, dispTextures: reoDisp)
+            snapshot = try compileCombinedShader(linCode: linCode, dispCode: dispCode,
+                                                 linTextures: reoLin, dispTextures: reoDisp)
         }
-        cachedACES2SourceSpace = sourceSpace
-        cachedACES2PeakNits    = peakNits
-        cachedACES2GamutTag    = gamutTag
-        cachedACES2LookSig     = lookSig
-        // Invalidate normal display-transform cache so a subsequent setupCombinedTransform
-        // call always recompiles (the pipeline state was just replaced).
-        cachedSourceSpace = nil
-        print("✅ Combined ACES2 GPU pass ready: \(sourceSpace) → \(linSpace) → ACES2 (\(orderedTextures.count) LUTs)")
+        snapshot.key = key
+        publish(snapshot)
+        print("✅ Combined ACES2 GPU pass ready: \(sourceSpace) → \(linSpace) → ACES2 (\(snapshot.textures.count) LUTs)")
     }
 
     /// Extract shader + textures from `processor`, build Metal textures, compile the
-    /// compute pipeline and install it.  Called by both display-transform and dynamic-ACES2 paths.
-    private func setupWithOCIOProcessor(_ processor: OCIOProcessor) throws {
+    /// compute pipeline. Returns it unpublished.  Called by both display-transform and dynamic-ACES2 paths.
+    private func setupWithOCIOProcessor(_ processor: OCIOProcessor) throws -> PipelineSnapshot {
         // Extract shader text AND all texture data in ONE call — both come from the same
         // GpuShaderDesc, guaranteeing they are consistent with each other.
         var shaderNSString: NSString?
@@ -309,7 +372,7 @@ class OCIOGPUProcessor {
             shaderCode: metalShaderCode)
 
         // Recompile shader with correct texture order
-        try compileMetalShader(shaderCode: metalShaderCode, textureInfos: rawInfos)
+        return try compileMetalShader(shaderCode: metalShaderCode, textureInfos: rawInfos)
     }
 
     // MARK: - Texture extraction helper
@@ -373,19 +436,28 @@ class OCIOGPUProcessor {
     ///   `scene_linear → ACES2065-1 → looks → display/view`, so the looks are baked into
     ///   the compiled shader and applied to every frame (persisting across a sequence)
     ///   rather than baked into a per-frame source texture.
+    @discardableResult
     func setupCombinedTransform(config: OCIOConfig,
                                 sourceSpace: String,
                                 display: String,
                                 view: String,
-                                lookSteps: [[String: String]] = []) throws {
+                                lookSteps: [[String: String]] = []) throws -> Bool {
+        return try runSetup("Combined transform") {
+            try setupCombinedTransformLocked(config: config, sourceSpace: sourceSpace,
+                                             display: display, view: view, lookSteps: lookSteps)
+        }
+    }
+
+    private func setupCombinedTransformLocked(config: OCIOConfig,
+                                              sourceSpace: String,
+                                              display: String,
+                                              view: String,
+                                              lookSteps: [[String: String]]) throws {
         let lookSig = lookSteps.map { $0.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "|") }
             .joined(separator: ";")
-        if cachedSourceSpace == sourceSpace &&
-           cachedDisplay == display &&
-           cachedView == view &&
-           cachedLookSig == lookSig &&
-           cachedIsCombined &&
-           pipelineState != nil { return }
+        let key = PipelineKey.combined(sourceSpace: sourceSpace, display: display,
+                                       view: view, lookSig: lookSig)
+        if currentSnapshot?.key == key { return }
 
         guard let sceneLinearSpace = config.sceneLinearColorSpace() else {
             throw OCIOGPUError.shaderCompilationFailed(
@@ -395,9 +467,6 @@ class OCIOGPUProcessor {
         print("🔧 Setting up combined single-pass GPU transform: \(sourceSpace) → [\(sceneLinearSpace)] → \(display)/\(view)"
               + (lookSteps.isEmpty ? "" : " (+\(lookSteps.count) AMF look step(s))"))
         rawLUTs.removeAll()
-        pipelineState = nil
-        orderedTextures = []
-        cachedIsCombined = false
 
         // Linearise pass (always required).
         let (linProc, _) = try OCIOProcessor.makeLinearizeProcessor(
@@ -412,7 +481,7 @@ class OCIOGPUProcessor {
 
         // Compile lin → exposure → dispProc, where dispProc is either a plain display
         // processor or a group that also folds in the AMF looks.
-        func compile(dispProc: OCIOProcessor) throws {
+        func compile(dispProc: OCIOProcessor) throws -> PipelineSnapshot {
             var dispShaderNS: NSString?; var dispTexArray: NSArray?
             try dispProc.getGPUShaderAndTextures(&dispShaderNS, texturesData: &dispTexArray)
             guard let dispCode = dispShaderNS as? String else {
@@ -420,16 +489,17 @@ class OCIOGPUProcessor {
             }
             let dispInfos = extractTextureInfos(from: dispTexArray as? [[String: Any]] ?? [], shaderCode: dispCode)
             let reoDisp   = reorderTexturesForOCIO(shaderCode: dispCode, textureInfos: dispInfos)
-            try compileCombinedShader(linCode: linCode, dispCode: dispCode,
-                                      linTextures: reoLin, dispTextures: reoDisp)
+            return try compileCombinedShader(linCode: linCode, dispCode: dispCode,
+                                             linTextures: reoLin, dispTextures: reoDisp)
         }
         func plainDisplay() throws -> OCIOProcessor {
             try OCIOProcessor.makeDisplayProcessor(
                 config: config, sourceSpace: sceneLinearSpace, display: display, view: view)
         }
 
+        var snapshot: PipelineSnapshot
         if lookSteps.isEmpty {
-            try compile(dispProc: try plainDisplay())
+            snapshot = try compile(dispProc: try plainDisplay())
         } else {
             // scene_linear → ACES2065-1 → [looks] → display/view, as one group transform.
             // Never leave the pipeline blank because a look-shader failed — fall back.
@@ -438,36 +508,44 @@ class OCIOGPUProcessor {
                 var steps: [[String: String]] = [["type": "colorspace", "src": sceneLinearSpace, "dst": acesSpace]]
                 steps += lookSteps
                 steps += [["type": "display", "src": acesSpace, "display": display, "view": view]]
-                try compile(dispProc: try OCIOProcessor.makeGroupTransformProcessor(config: config, steps: steps))
+                snapshot = try compile(dispProc: try OCIOProcessor.makeGroupTransformProcessor(config: config, steps: steps))
             } catch {
                 print("⚠️ Display look-shader failed (\(error)); falling back to no-look display pass")
-                try compile(dispProc: try plainDisplay())
+                snapshot = try compile(dispProc: try plainDisplay())
             }
         }
 
-        cachedSourceSpace = sourceSpace
-        cachedDisplay     = display
-        cachedView        = view
-        cachedLookSig     = lookSig
-        cachedIsCombined  = true
-        cachedACES2SourceSpace = nil   // invalidate ACES2 cache — pipeline now belongs to display transform
-        print("✅ Combined single-pass GPU transform ready (\(orderedTextures.count) LUT textures total)")
+        snapshot.key = key
+        publish(snapshot)
+        print("✅ Combined single-pass GPU transform ready (\(snapshot.textures.count) LUT textures total)")
     }
 
     /// Set up a combined GPU transform that uses an inverse display transform for the first step.
     /// Pipeline: inverse(inverseDisplay/inverseView) → scene_linear → ×exposure → display/view
+    @discardableResult
     func setupCombinedInverseDisplayTransform(config: OCIOConfig,
                                                inverseDisplay: String,
                                                inverseView: String,
                                                display: String,
-                                               view: String) throws {
+                                               view: String) throws -> Bool {
+        return try runSetup("Combined inverse display") {
+            try setupCombinedInverseDisplayTransformLocked(config: config,
+                                                           inverseDisplay: inverseDisplay,
+                                                           inverseView: inverseView,
+                                                           display: display, view: view)
+        }
+    }
+
+    private func setupCombinedInverseDisplayTransformLocked(config: OCIOConfig,
+                                                            inverseDisplay: String,
+                                                            inverseView: String,
+                                                            display: String,
+                                                            view: String) throws {
         // Use a synthetic source key so the cache can distinguish inverse display from normal
         let syntheticSource = "inv(\(inverseDisplay)/\(inverseView))"
-        if cachedSourceSpace == syntheticSource &&
-           cachedDisplay == display &&
-           cachedView == view &&
-           cachedIsCombined &&
-           pipelineState != nil { return }
+        let key = PipelineKey.combinedInverse(syntheticSource: syntheticSource,
+                                              display: display, view: view)
+        if currentSnapshot?.key == key { return }
 
         guard let sceneLinearSpace = config.sceneLinearColorSpace() else {
             throw OCIOGPUError.shaderCompilationFailed(
@@ -476,9 +554,6 @@ class OCIOGPUProcessor {
 
         print("🔧 Setting up combined inverse display GPU transform: inv(\(inverseDisplay)/\(inverseView)) → [\(sceneLinearSpace)] → \(display)/\(view)")
         rawLUTs.removeAll()
-        pipelineState = nil
-        orderedTextures = []
-        cachedIsCombined = false
 
         // Build the two processors
         let invProc = try OCIOProcessor.makeInverseDisplayProcessor(
@@ -505,40 +580,47 @@ class OCIOGPUProcessor {
         let reoLin    = reorderTexturesForOCIO(shaderCode: linCode,  textureInfos: linInfos)
         let reoDisp   = reorderTexturesForOCIO(shaderCode: dispCode, textureInfos: dispInfos)
 
-        try compileCombinedShader(linCode: linCode, dispCode: dispCode,
-                                  linTextures: reoLin, dispTextures: reoDisp)
-
-        cachedSourceSpace = syntheticSource
-        cachedDisplay     = display
-        cachedView        = view
-        cachedIsCombined  = true
-        cachedACES2SourceSpace = nil
-        print("✅ Combined inverse display GPU transform ready (\(orderedTextures.count) LUT textures total)")
+        var snapshot = try compileCombinedShader(linCode: linCode, dispCode: dispCode,
+                                                 linTextures: reoLin, dispTextures: reoDisp)
+        snapshot.key = key
+        publish(snapshot)
+        print("✅ Combined inverse display GPU transform ready (\(snapshot.textures.count) LUT textures total)")
     }
 
     /// Inverse-display variant of `setupCombinedACES2Transform`.
     /// Linearises via inverse display/view instead of a simple colorspace transform.
     /// Pipeline: inv(display/view) → scene_linear → ×exposure → ACES2
+    @discardableResult
     func setupCombinedInverseDisplayACES2Transform(config: OCIOConfig,
                                                     inverseDisplay: String,
                                                     inverseView: String,
                                                     peakNits: Float,
                                                     gamutTag: String,
-                                                    aces2Processor: OCIOProcessor) throws {
+                                                    aces2Processor: OCIOProcessor) throws -> Bool {
+        return try runSetup("Combined inverse-display ACES2") {
+            try setupCombinedInverseDisplayACES2TransformLocked(config: config,
+                                                                inverseDisplay: inverseDisplay,
+                                                                inverseView: inverseView,
+                                                                peakNits: peakNits,
+                                                                gamutTag: gamutTag,
+                                                                aces2Processor: aces2Processor)
+        }
+    }
+
+    private func setupCombinedInverseDisplayACES2TransformLocked(config: OCIOConfig,
+                                                                 inverseDisplay: String,
+                                                                 inverseView: String,
+                                                                 peakNits: Float,
+                                                                 gamutTag: String,
+                                                                 aces2Processor: OCIOProcessor) throws {
         let syntheticSource = "inv(\(inverseDisplay)/\(inverseView))"
-        if cachedACES2SourceSpace == syntheticSource &&
-           cachedACES2PeakNits == peakNits &&
-           cachedACES2GamutTag == gamutTag &&
-           pipelineState != nil { return }
+        // This pass applies no AMF looks, so its look signature is always empty.
+        let key = PipelineKey.aces2(sourceSpace: syntheticSource, peakNits: peakNits,
+                                    gamutTag: gamutTag, lookSig: "")
+        if currentSnapshot?.key == key { return }
 
         print("🔧 Setting up combined inverse-display ACES2 GPU transform: \(syntheticSource) → [linear] → ACES2")
         rawLUTs.removeAll()
-        pipelineState = nil
-        orderedTextures = []
-        cachedSourceSpace = nil
-        cachedDisplay = nil
-        cachedView = nil
-        cachedIsCombined = false
 
         let invProc = try OCIOProcessor.makeInverseDisplayProcessor(
             config: config, display: inverseDisplay, view: inverseView)
@@ -560,24 +642,21 @@ class OCIOGPUProcessor {
         let reoLin    = reorderTexturesForOCIO(shaderCode: linCode,  textureInfos: linInfos)
         let reoDisp   = reorderTexturesForOCIO(shaderCode: dispCode, textureInfos: dispInfos)
 
-        try compileCombinedShader(linCode: linCode, dispCode: dispCode,
-                                  linTextures: reoLin, dispTextures: reoDisp)
-        cachedACES2SourceSpace = syntheticSource
-        cachedACES2PeakNits    = peakNits
-        cachedACES2GamutTag    = gamutTag
-        cachedSourceSpace = nil
-        print("✅ Combined inverse-display ACES2 GPU pass ready: \(syntheticSource) → ACES2 (\(orderedTextures.count) LUTs)")
+        var snapshot = try compileCombinedShader(linCode: linCode, dispCode: dispCode,
+                                                 linTextures: reoLin, dispTextures: reoDisp)
+        snapshot.key = key
+        publish(snapshot)
+        print("✅ Combined inverse-display ACES2 GPU pass ready: \(syntheticSource) → ACES2 (\(snapshot.textures.count) LUTs)")
     }
 
     /// Returns true when the combined ACES2 pipeline is already compiled for the given parameters,
     /// meaning `setupCombinedACES2Transform` and the processor creation can be skipped entirely.
     func isACES2PipelineReady(sourceSpace: String, peakNits: Float, gamutTag: String,
                               lookSig: String = "") -> Bool {
-        return cachedACES2SourceSpace == sourceSpace &&
-               cachedACES2PeakNits   == peakNits &&
-               cachedACES2GamutTag   == gamutTag &&
-               cachedACES2LookSig    == lookSig &&
-               pipelineState != nil
+        // Fast pre-check only: the authoritative check runs inside `runSetup`, atomically
+        // with the compile, so a stale answer here at worst costs one coalesced request.
+        return currentSnapshot?.key == PipelineKey.aces2(sourceSpace: sourceSpace, peakNits: peakNits,
+                                              gamutTag: gamutTag, lookSig: lookSig)
     }
 
     /// - Parameters:
@@ -587,7 +666,7 @@ class OCIOGPUProcessor {
                                        linTextures: [TextureInfo],
                                        dispTextures: [TextureInfo],
                                        lookCode: String? = nil,
-                                       lookTextures: [TextureInfo] = []) throws {
+                                       lookTextures: [TextureInfo] = []) throws -> PipelineSnapshot {
         let source = generateCombinedShaderWrapper(linCode: linCode, dispCode: dispCode,
                                                    linTextures: linTextures, dispTextures: dispTextures,
                                                    lookCode: lookCode, lookTextures: lookTextures)
@@ -598,11 +677,10 @@ class OCIOGPUProcessor {
             throw OCIOGPUError.shaderCompilationFailed("No kernel function in combined shader")
         }
         let pso = try device.makeComputePipelineState(function: fn)
-        pipelineState      = pso
         // Texture binding order must match the kernel parameter order: lin, look, disp.
-        orderedTextures     = linTextures.map { $0.texture } + lookTextures.map { $0.texture } + dispTextures.map { $0.texture }
-        orderedTextureInfos = linTextures + lookTextures + dispTextures
+        let infos = linTextures + lookTextures + dispTextures
         print("✅ Combined shader compiled – \(linTextures.count) lin + \(lookTextures.count) look + \(dispTextures.count) disp LUTs")
+        return PipelineSnapshot(pipelineState: pso, textures: infos.map { $0.texture }, textureInfos: infos)
     }
 
     private func generateCombinedShaderWrapper(linCode: String, dispCode: String,
@@ -716,24 +794,15 @@ class OCIOGPUProcessor {
     }
 
     /// True when any pipeline (display transform or ACES2) has been compiled and
-    /// is ready to use via `encodeTransform`. Both paths share the same
-    /// `pipelineState` and `orderedTextures`, so this is the only check needed.
-    var isDisplayPipelineReady: Bool { pipelineState != nil }
+    /// is ready to use via `encodeTransform`. Both paths share the same snapshot,
+    /// so this is the only check needed.
+    var isDisplayPipelineReady: Bool { currentSnapshot != nil }
 
     /// Clear the compiled pipeline state so the next draw falls back to rendering
     /// `currentImage.metalTexture` directly (no OCIO shader applied).
     /// Used after a CPU-side AMF pipeline apply to show the pre-processed result.
     func invalidate() {
-        pipelineState = nil
-        orderedTextures = []
-        orderedTextureInfos = []
-        cachedSourceSpace = nil
-        cachedDisplay = nil
-        cachedView = nil
-        cachedLookSig = ""
-        cachedACES2SourceSpace = nil
-        cachedACES2LookSig = ""
-        cachedIsCombined = false
+        publish(nil)
     }
 
     /// Encode the OCIO transform into an **existing** command buffer using a
@@ -747,9 +816,12 @@ class OCIOGPUProcessor {
                          output: MTLTexture,
                          exposure: Float,
                          channelMask: SIMD4<Float> = SIMD4<Float>(1, 1, 1, 0)) -> Bool {
-        guard let pipelineState = self.pipelineState else { return false }
-        let orderedTextures = self.orderedTextures
+        // One consistent snapshot of pipeline + LUTs for this encode.
+        guard let snapshot = currentSnapshot else { return false }
+        let pipelineState = snapshot.pipelineState
+        let orderedTextures = snapshot.textures
         guard let computeEncoder = commandBuffer.makeComputeCommandEncoder() else { return false }
+        retainUntilCompleted(snapshot, by: commandBuffer)
 
         computeEncoder.setComputePipelineState(pipelineState)
         computeEncoder.setTexture(input, index: 0)
@@ -782,14 +854,14 @@ class OCIOGPUProcessor {
         exposure: Float,
         channelMask: SIMD4<Float> = SIMD4<Float>(1, 1, 1, 0)
     ) async -> MTLTexture? {
-        // Snapshot both state variables atomically at the start of this call.
-        // If orderedTextures were read lazily in the loop below, a concurrent
-        // (or re-entrant) setupDisplayTransform could swap them mid-iteration.
-        guard let pipelineState = self.pipelineState else {
+        // Take one consistent snapshot of pipeline + LUTs at the start of this call;
+        // a concurrent setup may publish a new one at any time.
+        guard let snapshot = currentSnapshot else {
             print("⚠️ Metal compute pipeline not set up")
             return nil
         }
-        let orderedTextures = self.orderedTextures   // immutable local snapshot
+        let pipelineState = snapshot.pipelineState
+        let orderedTextures = snapshot.textures
         
         guard let commandQueue = commandQueue else {
             print("❌ No Metal command queue")
@@ -854,6 +926,7 @@ class OCIOGPUProcessor {
         computeEncoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
         computeEncoder.endEncoding()
 
+        retainUntilCompleted(snapshot, by: commandBuffer)
         return await withCheckedContinuation { continuation in
             commandBuffer.addCompletedHandler { buf in
                 continuation.resume(returning: buf.status == .completed ? outputTexture : nil)
@@ -883,7 +956,7 @@ class OCIOGPUProcessor {
         let texture: MTLTexture
     }
     
-    private func compileMetalShader(shaderCode: String, textureInfos: [TextureInfo]) throws {
+    private func compileMetalShader(shaderCode: String, textureInfos: [TextureInfo]) throws -> PipelineSnapshot {
         do {
             let computeKernelWrapper = try generateShaderWrapper(shaderCode: shaderCode, textureInfos: textureInfos)
             let reorderedInfos = reorderTexturesForOCIO(shaderCode: shaderCode, textureInfos: textureInfos)
@@ -894,11 +967,10 @@ class OCIOGPUProcessor {
                 throw OCIOGPUError.shaderCompilationFailed("Failed to find compute kernel function")
             }
             let newPipeline = try device.makeComputePipelineState(function: function)
-            let newTextures = reorderedInfos.map { $0.texture }
-            pipelineState = newPipeline
-            self.orderedTextures = newTextures
-            self.orderedTextureInfos = reorderedInfos
             print("✅ Metal OCIO shader compiled (\(textureInfos.count) LUT textures)")
+            return PipelineSnapshot(pipelineState: newPipeline,
+                                    textures: reorderedInfos.map { $0.texture },
+                                    textureInfos: reorderedInfos)
         } catch {
             print("❌ Shader compilation failed: \(error.localizedDescription)")
             throw OCIOGPUError.shaderCompilationFailed("Metal shader compilation failed: \(error.localizedDescription)")
