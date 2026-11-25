@@ -16,6 +16,10 @@ struct DocumentContentView: View {
     /// The NSWindow that hosts this document view, captured by WindowConfigurator.
     /// Used to filter broadcast notifications so only the key window responds.
     @State private var hostWindow: NSWindow? = nil
+    /// Last windowed frame of `hostWindow`, saved with this image's settings.
+    @State private var windowFrame: WindowFrame? = nil
+    /// Saved frame waiting for `hostWindow` to be known (settings can load first).
+    @State private var pendingWindowFrame: WindowFrame? = nil
     /// Triggers a one-shot peak measurement in the Metal view on the next frame.
     @State private var measurePeak = false
     /// Guards against auto-saving while we are programmatically restoring settings.
@@ -199,6 +203,21 @@ struct DocumentContentView: View {
             .onChange(of: hostWindow) { _, newWindow in
                 // Set initial screen when the hosting NSWindow is first assigned.
                 document.imageManager.currentScreen = newWindow?.screen
+                if let pending = pendingWindowFrame, let newWindow {
+                    pendingWindowFrame = nil
+                    newWindow.restore(savedFrame: pending)
+                }
+                windowFrame = newWindow?.persistableFrame ?? windowFrame
+            }
+            // Track the windowed frame (move / resize end) so it is saved per image.
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didMoveNotification)) { notification in
+                recordWindowFrame(notification)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResizeNotification)) { notification in
+                recordWindowFrame(notification)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEndLiveResizeNotification)) { notification in
+                recordWindowFrame(notification)
             }
     }
 
@@ -263,6 +282,7 @@ struct DocumentContentView: View {
             .onChange(of: document.imageManager.amfEnabledLooks)         { _, _ in autosaveSettings() }
             .onChange(of: document.imageManager.amfLooksGloballyEnabled) { _, _ in autosaveSettings() }
             .onChange(of: scopeLayoutForPersistence)                 { _, _ in autosaveSettings() }
+            .onChange(of: windowFrame)                               { _, _ in autosaveSettings() }
             // Restored scopes may open before the source texture exists.
             .onChange(of: document.hasAppliedTransforms)             { _, _ in refreshVisibleScopes() }
     }
@@ -1055,6 +1075,28 @@ struct DocumentContentView: View {
             zOrder: scopeZOrder)
     }
 
+    /// Remember the host window's windowed frame after a move or resize.
+    /// Live-resize steps are skipped; the end-of-resize notification records it.
+    private func recordWindowFrame(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === hostWindow,
+              !window.inLiveResize, let frame = window.persistableFrame,
+              frame != windowFrame else { return }
+        windowFrame = frame
+    }
+
+    /// Re-apply this image's saved window frame. `nil` (never saved, or older
+    /// settings) keeps the window's current frame. Applied once the host window
+    /// is known; nothing else in the view resizes the window, so fit-to-window
+    /// zoom works inside whatever frame this sets.
+    private func restoreWindowFrame(_ frame: WindowFrame?) {
+        guard let frame else { return }
+        if let hostWindow {
+            hostWindow.restore(savedFrame: frame)
+        } else {
+            pendingWindowFrame = frame
+        }
+    }
+
     /// Re-apply a saved scope layout. `nil` (older settings) leaves the scopes as they are.
     private func restoreScopeLayout(_ layout: ScopeLayoutState?) {
         guard let layout else { return }
@@ -1172,8 +1214,9 @@ struct DocumentContentView: View {
             document.imageManager.restoreAMFLookToggles(
                 states: saved.amfLookStates,
                 globallyEnabled: saved.amfLooksGloballyEnabled)
-            // Scope overlays are independent of the OCIO config too.
+            // Scope overlays and the window frame are independent of the OCIO config too.
             restoreScopeLayout(saved.scopeLayout)
+            restoreWindowFrame(saved.windowFrame)
         }
 
         if let saved = saved, let fileURL = document.fileURL {
@@ -1595,7 +1638,8 @@ struct DocumentContentView: View {
             channelMode:            document.channelMode == .normal ? nil : document.channelMode.rawValue,
             amfLookStates:          amfToggles.states,
             amfLooksGloballyEnabled: amfToggles.globallyEnabled,
-            scopeLayout:            scopeLayoutForPersistence
+            scopeLayout:            scopeLayoutForPersistence,
+            windowFrame:            hostWindow?.persistableFrame ?? pendingWindowFrame ?? windowFrame
         )
         let store = OCIOSettingsStore.shared
         if document.isExtraWindow {
@@ -1883,6 +1927,7 @@ struct DocumentContentView: View {
                     states: saved.amfLookStates,
                     globallyEnabled: saved.amfLooksGloballyEnabled)
                 restoreScopeLayout(saved.scopeLayout)
+                restoreWindowFrame(saved.windowFrame)
                 Task { await document.imageManager.updateExposure(saved.exposure) }
                 isRestoringSettings = false
                 applyColorTransformAndReapplyDisplay()

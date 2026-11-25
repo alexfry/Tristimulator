@@ -70,6 +70,11 @@ struct OCIOPipelineSettings: Codable, Equatable {
     /// `nil` when the settings predate scope persistence (scopes keep their defaults).
     var scopeLayout:            ScopeLayoutState?
 
+    // MARK: - Window frame persistence
+    /// Main window frame (screen coordinates) when this image was last shown
+    /// windowed. `nil` when never saved (the window keeps its default frame).
+    var windowFrame:            WindowFrame?
+
     init(
         sourceSpace:             String              = "",
         destSpace:               String              = "",
@@ -96,7 +101,8 @@ struct OCIOPipelineSettings: Codable, Equatable {
         channelMode:             String?             = nil,
         amfLookStates:           [String: Bool]?     = nil,
         amfLooksGloballyEnabled: Bool?               = nil,
-        scopeLayout:             ScopeLayoutState?   = nil
+        scopeLayout:             ScopeLayoutState?   = nil,
+        windowFrame:             WindowFrame?        = nil
     ) {
         self.sourceSpace             = sourceSpace
         self.destSpace               = destSpace
@@ -124,6 +130,7 @@ struct OCIOPipelineSettings: Codable, Equatable {
         self.amfLookStates           = amfLookStates
         self.amfLooksGloballyEnabled = amfLooksGloballyEnabled
         self.scopeLayout             = scopeLayout
+        self.windowFrame             = windowFrame
     }
 
     // Custom decoder for backward compatibility with existing JSON files
@@ -156,6 +163,8 @@ struct OCIOPipelineSettings: Codable, Equatable {
         amfLooksGloballyEnabled = try c.decodeIfPresent(Bool.self,     forKey: .amfLooksGloballyEnabled)
         // A malformed scope layout should never cost the user their colour settings.
         scopeLayout            = try? c.decodeIfPresent(ScopeLayoutState.self, forKey: .scopeLayout)
+        // Likewise a malformed window frame is simply ignored.
+        windowFrame            = try? c.decodeIfPresent(WindowFrame.self, forKey: .windowFrame)
     }
 }
 
@@ -305,6 +314,9 @@ final class OCIOSettingsStore {
     /// Persist `settings` as the new global defaults (applied to images opened
     /// for the first time). Also flushes the index.
     func saveAsGlobalDefaults(_ settings: OCIOPipelineSettings) {
+        // The window frame belongs to one image; new images keep their default frame.
+        var settings = settings
+        settings.windowFrame = nil
         globalDefaults = settings
         Self.saveGlobalDefaultsToUserDefaults(settings)
         saveImageIndex()
