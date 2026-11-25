@@ -782,6 +782,7 @@ struct DocumentContentView: View {
                         sourceColorSpace: document.selectedSourceSpace,
                         containerSize: containerSize,
                         onClose: { showUCSDiagram = false },
+                        onModeChanged: { updateUCS() },
                         placement: scopePlacementBinding(.uv),
                         onMouseDown: { scopeMouseDown(.uv, at: $0) }
                     )

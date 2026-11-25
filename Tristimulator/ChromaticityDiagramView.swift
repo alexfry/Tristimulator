@@ -129,8 +129,9 @@ struct ChromaticityDiagramView: View {
                     pointCount: service.pointCount,
                     pointsVersion: service.pointsVersion,
                     spec: Scope3DMarkerSpec(
-                        kind: .yxy(stopsMin: ChromaticityScopeService.stopsMin3D,
-                                   stopsMax: ChromaticityScopeService.stopsMax3D),
+                        kind: .chromaticity(.xy,
+                                            stopsMin: ChromaticityScopeService.stopsMin3D,
+                                            stopsMax: ChromaticityScopeService.stopsMax3D),
                         sourceColorSpace: sourceColorSpace)
                 )
             } else {

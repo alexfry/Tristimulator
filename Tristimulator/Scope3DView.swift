@@ -2,11 +2,12 @@
 //  Scope3DView.swift
 //  Tristimulator
 //
-//  Minimal 3D view for the Yxy and JMh scopes.
+//  Minimal 3D view for the Yxy, u'v' and JMh scopes.
 //
-//  The compute kernels (chromaticityPoints / jmhPoints) write one point per
+//  The compute kernels (chromaticityPoints / ucsPoints / jmhPoints) write one point per
 //  sample in *scope space*:
 //      Yxy: (x, log2 Y, y)          — vertical axis in stops, 0 = scene-linear 1.0 (SDR white)
+//      u'v': (u', log2 Y, v')       — same vertical axis as Yxy
 //      JMh: (M·cos h, J, M·sin h)   — vertical axis linear J
 //  A per-scope model matrix maps scope space into a ~[-1, 1] world box; the
 //  orbit camera's view-projection is folded in and passed to every shader as
@@ -62,33 +63,72 @@ enum Scope3DGPU {
     }
 }
 
+// MARK: - Chromaticity coordinate systems
+
+/// Floor-plane coordinates for the chromaticity (log2 Y vertical) 3D scopes.
+/// Everything that differs between Yxy and u'v' lives here, so the marker
+/// builder and model matrix are shared.
+enum Scope3DChromaticitySystem: Equatable {
+    case xy    // CIE 1931 xy
+    case uv    // CIE 1976 u'v'
+
+    /// Floor bounds (matches the 2D diagrams and the compute kernels' clip).
+    var bounds: (minA: Float, maxA: Float, minB: Float, maxB: Float) {
+        switch self {
+        case .xy: return (0, 0.8, 0, 0.9)
+        case .uv: return (0, 0.7, 0, 0.65)
+        }
+    }
+
+    var axisNames: (a: String, b: String) {
+        switch self {
+        case .xy: return ("x", "y")
+        case .uv: return ("u\u{2032}", "v\u{2032}")
+        }
+    }
+
+    /// CIE 1931 xy → this system's floor coordinates.
+    func fromXY(_ x: Float, _ y: Float) -> SIMD2<Float> {
+        switch self {
+        case .xy:
+            return [x, y]
+        case .uv:
+            let d = -2 * x + 12 * y + 3
+            guard abs(d) > 1e-10 else { return .zero }
+            return [4 * x / d, 9 * y / d]
+        }
+    }
+}
+
 // MARK: - Marker spec
 
 /// Everything the cached marker geometry depends on. The renderer rebuilds its
 /// line buffer and label atlas only when this changes.
 struct Scope3DMarkerSpec: Equatable {
     enum Kind: Equatable {
-        /// Vertical axis in stops of Y.
-        case yxy(stopsMin: Float, stopsMax: Float)
+        /// Chromaticity floor (xy or u'v'), vertical axis in stops of Y.
+        case chromaticity(Scope3DChromaticitySystem, stopsMin: Float, stopsMax: Float)
         /// Floor radius maxM, vertical axis 0…jTop (linear J).
         case jmh(maxM: Float, jTop: Float)
     }
     var kind: Kind
-    /// Source colour space name; its gamut is drawn highlighted (Yxy).
+    /// Source colour space name; its gamut is drawn highlighted (Yxy / u'v').
     var sourceColorSpace: String
 
     /// Scope space → world box (~[-1, 1] horizontally, [-0.8, 0.8] vertically).
     var modelMatrix: simd_float4x4 {
         switch kind {
-        case let .yxy(stopsMin, stopsMax):
-            // x ∈ [0, 0.8] → X, y ∈ [0, 0.9] → −Z, stops → Y
-            let k: Float = 1.0 / 0.45
+        case let .chromaticity(system, stopsMin, stopsMax):
+            // Floor a (x or u') → X, b (y or v') → −Z, centred, longer side → [-1, 1]; stops → Y
+            let bd = system.bounds
+            let ca = (bd.minA + bd.maxA) / 2, cb = (bd.minB + bd.maxB) / 2
+            let k: Float = 1.0 / max((bd.maxA - bd.minA) / 2, (bd.maxB - bd.minB) / 2)
             let vs: Float = 1.6 / max(stopsMax - stopsMin, 1e-3)
             return simd_float4x4(columns: (
                 SIMD4<Float>(k, 0, 0, 0),
                 SIMD4<Float>(0, vs, 0, 0),
                 SIMD4<Float>(0, 0, -k, 0),
-                SIMD4<Float>(-0.4 * k, -stopsMin * vs - 0.8, 0.45 * k, 1)
+                SIMD4<Float>(-ca * k, -stopsMin * vs - 0.8, cb * k, 1)
             ))
         case let .jmh(maxM, jTop):
             // M·cos h → X, M·sin h → −Z, J → Y
@@ -146,12 +186,21 @@ private struct Scope3DMarkerBuilder {
                                           align: align, offset: offset, fontSize: size))
     }
 
-    // MARK: Yxy
+    // MARK: Chromaticity (Yxy / u'v')
 
-    static func yxy(stopsMin: Float, stopsMax: Float, sourceColorSpace: String) -> Scope3DMarkerBuilder {
+    static func chromaticity(_ system: Scope3DChromaticitySystem, stopsMin: Float, stopsMax: Float,
+                             sourceColorSpace: String) -> Scope3DMarkerBuilder {
         var b = Scope3DMarkerBuilder()
-        // Scope space is (x, stops, y).
-        func p(_ x: CGFloat, _ y: CGFloat, _ s: Float) -> SIMD3<Float> { [Float(x), s, Float(y)] }
+        // Scope space is (a, stops, b) with (a, b) = (x, y) or (u', v').
+        // `p` takes CIE 1931 xy and converts to the floor system.
+        func p(_ x: CGFloat, _ y: CGFloat, _ s: Float) -> SIMD3<Float> {
+            let f = system.fromXY(Float(x), Float(y))
+            return [f.x, s, f.y]
+        }
+        // `q` takes floor coordinates directly (axes, ticks).
+        func q(_ a: CGFloat, _ bb: CGFloat, _ s: Float) -> SIMD3<Float> { [Float(a), s, Float(bb)] }
+        let bd = system.bounds
+        let names = system.axisNames
         let floor = stopsMin, top = stopsMax
         let grey: SIMD4<Float> = [0.75, 0.75, 0.75, 0.6]
 
@@ -191,36 +240,40 @@ private struct Scope3DMarkerBuilder {
         b.line(p(0.3127, 0.3290, floor), p(0.3127, 0.3290, top), [1, 1, 1, 0.35], width: 1)
         b.label("D65", at: p(0.3127, 0.3290, floor), [1, 1, 1, 0.7], offset: [5, -5], size: 8)
 
-        // Axes: x and y along the floor, Y vertical at the origin.
-        b.line(p(0, 0, floor), p(0.8, 0, floor), grey, width: 1)
-        b.line(p(0, 0, floor), p(0, 0.9, floor), grey, width: 1)
-        b.line(p(0, 0, floor), p(0, 0, top), grey, width: 1.25)
-        for i in 1...8 {
+        // Axes: a (x / u') and b (y / v') along the floor, Y vertical at the origin.
+        b.line(q(0, 0, floor), q(CGFloat(bd.maxA), 0, floor), grey, width: 1)
+        b.line(q(0, 0, floor), q(0, CGFloat(bd.maxB), floor), grey, width: 1)
+        b.line(q(0, 0, floor), q(0, 0, top), grey, width: 1.25)
+        let aTicks = Int((bd.maxA * 10 + 1e-3).rounded(.down))
+        let bTicks = Int((bd.maxB * 10 + 1e-3).rounded(.down))
+        for i in 1...max(aTicks, bTicks) {
             let v = CGFloat(i) * 0.1
-            b.line(p(v, 0, floor), p(v, -0.015, floor), grey, width: 1)
-            if i <= 7 { b.line(p(0, v, floor), p(-0.015, v, floor), grey, width: 1) }
-            if i % 2 == 0 {
-                let t = String(format: "%.1f", Double(v))
-                b.label(t, at: p(v, -0.02, floor), grey, align: [0.5, 1], offset: [0, -2], size: 7)
-                if i <= 8 { b.label(t, at: p(-0.02, v, floor), grey, align: [1, 0.5], offset: [-3, 0], size: 7) }
+            let t = String(format: "%.1f", Double(v))
+            if i <= aTicks {
+                b.line(q(v, 0, floor), q(v, -0.015, floor), grey, width: 1)
+                if i % 2 == 0 { b.label(t, at: q(v, -0.02, floor), grey, align: [0.5, 1], offset: [0, -2], size: 7) }
+            }
+            if i <= bTicks {
+                b.line(q(0, v, floor), q(-0.015, v, floor), grey, width: 1)
+                if i % 2 == 0 { b.label(t, at: q(-0.02, v, floor), grey, align: [1, 0.5], offset: [-3, 0], size: 7) }
             }
         }
-        b.label("x", at: p(0.8, 0, floor), [1, 1, 1, 0.8], offset: [5, 0], size: 10)
-        b.label("y", at: p(0, 0.9, floor), [1, 1, 1, 0.8], offset: [5, 0], size: 10)
-        b.label("Y (stops)", at: p(0, 0, top), [1, 1, 1, 0.8], align: [0.5, 0], offset: [0, 6], size: 10)
+        b.label(names.a, at: q(CGFloat(bd.maxA), 0, floor), [1, 1, 1, 0.8], offset: [5, 0], size: 10)
+        b.label(names.b, at: q(0, CGFloat(bd.maxB), floor), [1, 1, 1, 0.8], offset: [5, 0], size: 10)
+        b.label("Y (stops)", at: q(0, 0, top), [1, 1, 1, 0.8], align: [0.5, 0], offset: [0, 6], size: 10)
 
         // Vertical ticks at whole stops; SDR white (0 stops, Y = 1.0) emphasised.
         let labelEvery = (top - floor) > 10 ? 2 : 1
         for s in Int(floor.rounded(.up))...Int(top.rounded(.down)) {
             let sf = Float(s)
             if s == 0 {
-                b.line(p(0, 0, 0), p(0.06, 0, 0), [1, 1, 1, 0.95], width: 2)
-                b.line(p(0, 0, 0), p(0, 0.06, 0), [1, 1, 1, 0.95], width: 2)
-                b.label("0  SDR white", at: p(-0.02, 0, 0), [1, 1, 1, 0.95], align: [1, 0.5], offset: [-3, 0], size: 8)
+                b.line(q(0, 0, 0), q(0.06, 0, 0), [1, 1, 1, 0.95], width: 2)
+                b.line(q(0, 0, 0), q(0, 0.06, 0), [1, 1, 1, 0.95], width: 2)
+                b.label("0  SDR white", at: q(-0.02, 0, 0), [1, 1, 1, 0.95], align: [1, 0.5], offset: [-3, 0], size: 8)
             } else {
-                b.line(p(0, 0, sf), p(0.025, 0, sf), grey, width: 1)
+                b.line(q(0, 0, sf), q(0.025, 0, sf), grey, width: 1)
                 if s % labelEvery == 0 {
-                    b.label(s > 0 ? "+\(s)" : "\(s)", at: p(-0.02, 0, sf), grey,
+                    b.label(s > 0 ? "+\(s)" : "\(s)", at: q(-0.02, 0, sf), grey,
                             align: [1, 0.5], offset: [-3, 0], size: 7)
                 }
             }
@@ -570,8 +623,9 @@ final class Scope3DRenderer: NSObject, MTKViewDelegate {
 
         var builder: Scope3DMarkerBuilder
         switch spec.kind {
-        case let .yxy(stopsMin, stopsMax):
-            builder = .yxy(stopsMin: stopsMin, stopsMax: stopsMax, sourceColorSpace: spec.sourceColorSpace)
+        case let .chromaticity(system, stopsMin, stopsMax):
+            builder = .chromaticity(system, stopsMin: stopsMin, stopsMax: stopsMax,
+                                    sourceColorSpace: spec.sourceColorSpace)
         case let .jmh(maxM, jTop):
             builder = .jmh(maxM: maxM, jTop: jTop)
         }

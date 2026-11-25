@@ -208,12 +208,14 @@ kernel void chromaticityNormalize(
 }
 
 // ---------------------------------------------------------------------------
-// 3D point cloud path (Yxy): one point per sample instead of a 2D bin.
-// Selected by ChromaticityScopeService.is3D; the 2D histogram path above is
-// unchanged and stays the default.
+// 3D point cloud path (Yxy and u'v'): one point per sample instead of a 2D
+// bin. Selected by ChromaticityScopeService.is3D; the 2D histogram paths
+// above are unchanged and stay the default.
 //
 // Point layout (scope space, see Scope3DView.swift):
-//   position = (x, log2(Y) in stops, y, 1)   — Y = 1.0 (scene-linear SDR white) is 0 stops
+//   position = (x, log2(Y) in stops, y, 1)    — chromaticityPoints
+//   position = (u', log2(Y) in stops, v', 1)  — ucsPoints
+//   Y = 1.0 (scene-linear SDR white) is 0 stops
 //   color    = display colour (EDR-compressed), alpha 1
 // ---------------------------------------------------------------------------
 
@@ -278,5 +280,36 @@ kernel void chromaticityPoints(
     if (idx >= params.maxPoints) return;
 
     points[idx].position = float4(cx, stops, cy, 1.0);
+    points[idx].color    = float4(chromaticityPointColour(color.rgb, params.maxEDR), 1.0);
+}
+
+// CIE 1976 UCS counterpart of chromaticityPoints (same bounds as ucsHistogram).
+kernel void ucsPoints(
+    texture2d<float, access::read>   srcTexture [[texture(0)]],
+    device ChromaticityScopePoint*   points     [[buffer(0)]],
+    device atomic_uint*              counter    [[buffer(1)]],
+    constant ChromaticityPointParams& params    [[buffer(2)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 pixelCoord = gid * params.stride;
+    if (pixelCoord.x >= srcTexture.get_width() || pixelCoord.y >= srcTexture.get_height()) return;
+
+    float4 color = srcTexture.read(pixelCoord);
+    if (color.r <= 0.0 && color.g <= 0.0 && color.b <= 0.0) return;
+
+    float3 xyz = params.rgbToXYZ * color.rgb;
+    float  denom = xyz.x + 15.0 * xyz.y + 3.0 * xyz.z;
+    if (denom <= 1e-7) return;
+
+    float u_prime = 4.0 * xyz.x / denom;
+    float v_prime = 9.0 * xyz.y / denom;
+    if (u_prime < 0.0 || u_prime > 0.7 || v_prime < 0.0 || v_prime > 0.65) return;
+
+    float stops = clamp(log2(max(xyz.y, 1e-6)), params.stopsMin, params.stopsMax);
+
+    uint idx = atomic_fetch_add_explicit(counter, 1, memory_order_relaxed);
+    if (idx >= params.maxPoints) return;
+
+    points[idx].position = float4(u_prime, stops, v_prime, 1.0);
     points[idx].color    = float4(chromaticityPointColour(color.rgb, params.maxEDR), 1.0);
 }

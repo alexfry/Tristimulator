@@ -33,7 +33,7 @@ final class ChromaticityScopeService {
     /// The diagram mode this service instance computes.
     let mode: ChromaticityDiagramMode
 
-    /// 3D point-cloud mode (Yxy only). When true, `update` writes one point per
+    /// 3D point-cloud mode (Yxy and u'v'). When true, `update` writes one point per
     /// sample into `pointBuffer` instead of building the 2D density texture.
     /// 2D stays the default.
     var is3D = false
@@ -46,7 +46,7 @@ final class ChromaticityScopeService {
     private(set) var pointsVersion: UInt = 0
 
     /// Whether this service can produce a 3D point cloud.
-    var supports3D: Bool { mode == .yxy }
+    var supports3D: Bool { true }
 
     // MARK: - Configuration
 
@@ -56,7 +56,7 @@ final class ChromaticityScopeService {
     var targetSampleCount = 250_000
     /// Point budget for the 3D cloud (capacity of each point buffer).
     static let maxPoints3D = 262_144
-    /// Vertical axis range of the 3D Yxy scope, in stops of Y (0 = scene-linear 1.0, SDR white).
+    /// Vertical axis range of the 3D Yxy and u'v' scopes, in stops of Y (0 = scene-linear 1.0, SDR white).
     static let stopsMin3D: Float = -8
     static let stopsMax3D: Float = 6
 
@@ -272,7 +272,7 @@ final class ChromaticityScopeService {
             guard let p = device.makeBuffer(length: length, options: .storageModePrivate),
                   let c = device.makeBuffer(length: MemoryLayout<UInt32>.stride, options: .storageModeShared)
             else { pointBuffers = []; counterBuffers = []; return }
-            p.label = "Yxy 3D points"
+            p.label = mode == .yxy ? "Yxy 3D points" : "u'v' 3D points"
             pointBuffers.append(p)
             counterBuffers.append(c)
         }
@@ -360,7 +360,12 @@ final class ChromaticityScopeService {
         if let normFunc = library.makeFunction(name: "chromaticityNormalize") {
             normalizePipeline = try? device.makeComputePipelineState(function: normFunc)
         }
-        if mode == .yxy, let pointsFunc = library.makeFunction(name: "chromaticityPoints") {
+        let pointsKernelName: String
+        switch mode {
+        case .yxy: pointsKernelName = "chromaticityPoints"
+        case .ucs: pointsKernelName = "ucsPoints"
+        }
+        if let pointsFunc = library.makeFunction(name: pointsKernelName) {
             pointsPipeline = try? device.makeComputePipelineState(function: pointsFunc)
         }
     }
