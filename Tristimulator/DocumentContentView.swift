@@ -769,6 +769,7 @@ struct DocumentContentView: View {
                         sourceColorSpace: document.selectedSourceSpace,
                         containerSize: containerSize,
                         onClose: { showChromaticityDiagram = false },
+                        onModeChanged: { updateChromaticity() },
                         placement: scopePlacementBinding(.yxy),
                         onMouseDown: { scopeMouseDown(.yxy, at: $0) }
                     )
@@ -794,6 +795,7 @@ struct DocumentContentView: View {
                         containerSize: containerSize,
                         onClose: { showJmhDiagram = false },
                         onMaxMChanged: { updateJmh() },
+                        onModeChanged: { updateJmh() },
                         placement: scopePlacementBinding(.jmh),
                         onMouseDown: { scopeMouseDown(.jmh, at: $0) }
                     )

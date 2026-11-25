@@ -22,6 +22,8 @@ struct ChromaticityOverlayView: View {
     let sourceColorSpace: String
     var containerSize: CGSize = .zero
     var onClose: (() -> Void)?
+    /// Called after the 2D/3D toggle flips so the owner can recompute the scope.
+    var onModeChanged: (() -> Void)?
 
     /// Where the overlay sits; owned by DocumentContentView so it can be saved per image.
     @Binding var placement: ScopeOverlayPlacement
@@ -60,7 +62,11 @@ struct ChromaticityOverlayView: View {
 
                 Spacer()
 
-                Color.clear.frame(width: 12, height: 12)
+                Scope3DToggleButton(is3D: service?.is3D ?? false, isEnabled: service != nil) {
+                    guard let service else { return }
+                    service.is3D.toggle()
+                    onModeChanged?()
+                }
             }
             // 12 pt keeps the close button clear of the top-left resize corner.
             .padding(.horizontal, 12)
@@ -115,17 +121,31 @@ struct ChromaticityDiagramView: View {
     var body: some View {
         GeometryReader { geo in
             let size = geo.size
-            ZStack {
-                // Metal density heatmap (behind Canvas)
-                if let service = service, service.densityTexture != nil {
-                    ChromaticityMetalView(service: service)
-                }
-
-                // SwiftUI Canvas overlay: spectral locus, gamuts, labels
-                ChromaticityCanvasOverlay(
-                    size: size,
-                    sourceColorSpace: sourceColorSpace
+            if let service, service.is3D {
+                // 3D point cloud; markers are drawn in Metal, Canvas overlays hidden.
+                Scope3DView(
+                    device: service.device,
+                    pointBuffer: service.pointBuffer,
+                    pointCount: service.pointCount,
+                    pointsVersion: service.pointsVersion,
+                    spec: Scope3DMarkerSpec(
+                        kind: .yxy(stopsMin: ChromaticityScopeService.stopsMin3D,
+                                   stopsMax: ChromaticityScopeService.stopsMax3D),
+                        sourceColorSpace: sourceColorSpace)
                 )
+            } else {
+                ZStack {
+                    // Metal density heatmap (behind Canvas)
+                    if let service = service, service.densityTexture != nil {
+                        ChromaticityMetalView(service: service)
+                    }
+
+                    // SwiftUI Canvas overlay: spectral locus, gamuts, labels
+                    ChromaticityCanvasOverlay(
+                        size: size,
+                        sourceColorSpace: sourceColorSpace
+                    )
+                }
             }
         }
         .aspectRatio(DiagramConstants.aspectRatio, contentMode: .fit)

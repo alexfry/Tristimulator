@@ -206,3 +206,77 @@ kernel void chromaticityNormalize(
 
     output.write(float4(outColor, alpha), gid);
 }
+
+// ---------------------------------------------------------------------------
+// 3D point cloud path (Yxy): one point per sample instead of a 2D bin.
+// Selected by ChromaticityScopeService.is3D; the 2D histogram path above is
+// unchanged and stays the default.
+//
+// Point layout (scope space, see Scope3DView.swift):
+//   position = (x, log2(Y) in stops, y, 1)   — Y = 1.0 (scene-linear SDR white) is 0 stops
+//   color    = display colour (EDR-compressed), alpha 1
+// ---------------------------------------------------------------------------
+
+struct ChromaticityScopePoint {
+    float4 position;
+    float4 color;
+};
+
+struct ChromaticityPointParams {
+    float3x3 rgbToXYZ;
+    uint     stride;
+    uint     maxPoints;   // capacity of the point buffer
+    float    maxEDR;
+    float    stopsMin;    // vertical axis floor (log2 Y)
+    float    stopsMax;    // vertical axis top (log2 Y)
+};
+
+// Same colour treatment as chromaticityNormalize, minus the density term.
+static float3 chromaticityPointColour(float3 rgb, float maxEDR) {
+    rgb = max(rgb, 0.0);
+    float peak = max(max(rgb.r, rgb.g), max(rgb.b, 0.001));
+    float3 chroma = rgb / peak;
+    float displayPeak = peak;
+    if (peak > 1.0) {
+        float excess = peak - 1.0;
+        float maxExcess = max(maxEDR - 1.0, 0.0);
+        displayPeak = 1.0 + maxExcess * excess / (excess + maxExcess);
+    }
+    float3 outColor = chroma * displayPeak;
+    float maxC = max(max(outColor.r, outColor.g), outColor.b);
+    if (maxC < 0.08) {
+        outColor = outColor / max(maxC, 0.001) * 0.08;
+    }
+    return outColor;
+}
+
+kernel void chromaticityPoints(
+    texture2d<float, access::read>   srcTexture [[texture(0)]],
+    device ChromaticityScopePoint*   points     [[buffer(0)]],
+    device atomic_uint*              counter    [[buffer(1)]],
+    constant ChromaticityPointParams& params    [[buffer(2)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 pixelCoord = gid * params.stride;
+    if (pixelCoord.x >= srcTexture.get_width() || pixelCoord.y >= srcTexture.get_height()) return;
+
+    float4 color = srcTexture.read(pixelCoord);
+    if (color.r <= 0.0 && color.g <= 0.0 && color.b <= 0.0) return;
+
+    float3 xyz = params.rgbToXYZ * color.rgb;
+    float  sum = xyz.x + xyz.y + xyz.z;
+    if (sum <= 1e-7) return;
+
+    float cx = xyz.x / sum;
+    float cy = xyz.y / sum;
+    if (cx < 0.0 || cx > 0.8 || cy < 0.0 || cy > 0.9) return;
+
+    // Vertical axis: luminance in stops relative to scene-linear 1.0.
+    float stops = clamp(log2(max(xyz.y, 1e-6)), params.stopsMin, params.stopsMax);
+
+    uint idx = atomic_fetch_add_explicit(counter, 1, memory_order_relaxed);
+    if (idx >= params.maxPoints) return;
+
+    points[idx].position = float4(cx, stops, cy, 1.0);
+    points[idx].color    = float4(chromaticityPointColour(color.rgb, params.maxEDR), 1.0);
+}

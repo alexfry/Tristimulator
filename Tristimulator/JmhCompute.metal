@@ -197,3 +197,79 @@ kernel void jmhNormalize(
 
     output.write(float4(outColor, alpha), gid);
 }
+
+// ---------------------------------------------------------------------------
+// 3D point cloud path (JMh): one point per sample instead of a 2D bin.
+// Selected by JmhScopeService.is3D; the 2D histogram path above is unchanged
+// and stays the default.
+//
+// Point layout (scope space, see Scope3DView.swift):
+//   position = (M·cos h, J, M·sin h, 1)
+//   color    = display colour (EDR-compressed), alpha 1
+// Uses the same (AP1-assuming) JMh maths as jmhHistogram.
+// ---------------------------------------------------------------------------
+
+struct JmhScopePoint {
+    float4 position;
+    float4 color;
+};
+
+struct JmhPointParams {
+    float3x3 rgbToXYZ;   // Unused, as in JmhParams
+    uint     stride;
+    uint     maxPoints;
+    float    maxEDR;
+    float    maxM;
+};
+
+static float3 jmhPointColour(float3 rgb, float maxEDR) {
+    rgb = max(rgb, 0.0);
+    float peak = max(max(rgb.r, rgb.g), max(rgb.b, 0.001));
+    float3 chroma = rgb / peak;
+    float displayPeak = peak;
+    if (peak > 1.0) {
+        float excess = peak - 1.0;
+        float maxExcess = max(maxEDR - 1.0, 0.0);
+        displayPeak = 1.0 + maxExcess * excess / (excess + maxExcess);
+    }
+    float3 outColor = chroma * displayPeak;
+    float maxC = max(max(outColor.r, outColor.g), outColor.b);
+    if (maxC < 0.08) {
+        outColor = outColor / max(maxC, 0.001) * 0.08;
+    }
+    return outColor;
+}
+
+kernel void jmhPoints(
+    texture2d<float, access::read>  srcTexture [[texture(0)]],
+    device JmhScopePoint*           points     [[buffer(0)]],
+    device atomic_uint*             stats      [[buffer(1)]],   // [0] count, [1] max J × 100
+    constant JmhPointParams&        params     [[buffer(2)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 pixelCoord = gid * params.stride;
+    if (pixelCoord.x >= srcTexture.get_width() || pixelCoord.y >= srcTexture.get_height()) return;
+
+    float4 color = srcTexture.read(pixelCoord);
+    if (color.r <= 0.0 && color.g <= 0.0 && color.b <= 0.0) return;
+
+    float3 lms = ap1_to_lms * color.rgb;
+    float3 F_L_v = pow(abs(lms), float3(0.419999987, 0.419999987, 0.419999987));
+    float3 rgb_a = (sign(lms) * F_L_v) / (27.1299992 + F_L_v);
+    float3 Aab = panlrcm * rgb_a;
+    if (Aab.x <= 0.0) return;
+
+    float J = 100.0 * pow(Aab.x, 1.13705599);
+    float a = Aab.y;
+    float b = Aab.z;
+    float M = (J == 0.0) ? 0.0 : sqrt(a * a + b * b);
+    float h = (a == 0.0) ? 0.0 : atan2(b, a);   // radians
+    if (M > params.maxM) return;
+
+    uint idx = atomic_fetch_add_explicit(&stats[0], 1, memory_order_relaxed);
+    if (idx >= params.maxPoints) return;
+    atomic_fetch_max_explicit(&stats[1], uint(min(J, 1.0e6) * 100.0), memory_order_relaxed);
+
+    points[idx].position = float4(M * cos(h), J, M * sin(h), 1.0);
+    points[idx].color    = float4(jmhPointColour(color.rgb, params.maxEDR), 1.0);
+}
