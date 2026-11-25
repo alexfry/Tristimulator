@@ -102,7 +102,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.package.outputs.tag }}
           RELEASE_DMG: ${{ steps.package.outputs.dmg }}
-          RELEASE_SHA256: ${{ steps.package.outputs.checksum }}
           RELEASE_STAPLED: ${{ steps.package.outputs.stapled }}
         run: Scripts/ci_publish_draft_release.sh
 
