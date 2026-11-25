@@ -18,6 +18,8 @@ struct UCSOverlayView: View {
     let sourceColorSpace: String
     var containerSize: CGSize = .zero
     var onClose: (() -> Void)?
+    /// Called after the 2D/3D toggle flips so the owner can recompute the scope.
+    var onModeChanged: (() -> Void)?
 
     /// Where the overlay sits; owned by DocumentContentView so it can be saved per image.
     @Binding var placement: ScopeOverlayPlacement
@@ -56,7 +58,11 @@ struct UCSOverlayView: View {
 
                 Spacer()
 
-                Color.clear.frame(width: 12, height: 12)
+                Scope3DToggleButton(is3D: service?.is3D ?? false, isEnabled: service != nil) {
+                    guard let service else { return }
+                    service.is3D.toggle()
+                    onModeChanged?()
+                }
             }
             // 12 pt keeps the close button clear of the top-left resize corner.
             .padding(.horizontal, 12)
@@ -109,21 +115,40 @@ struct UCSDiagramView: View {
     let sourceColorSpace: String
 
     var body: some View {
-        GeometryReader { geo in
-            let size = geo.size
-            ZStack {
-                if let service = service, service.densityTexture != nil {
-                    ChromaticityMetalView(service: service)
+        if let service, service.is3D {
+            // 3D point cloud; markers are drawn in Metal, Canvas overlays hidden.
+            // Fills the whole content area under the title bar (no 2D aspect
+            // frame); the projection follows the view's actual aspect.
+            Scope3DView(
+                device: service.device,
+                pointBuffer: service.pointBuffer,
+                pointCount: service.pointCount,
+                pointsVersion: service.pointsVersion,
+                spec: Scope3DMarkerSpec(
+                    kind: .chromaticity(.uv,
+                                        stopsMin: ChromaticityScopeService.stopsMin3D,
+                                        stopsMax: ChromaticityScopeService.stopsMax3D),
+                    sourceColorSpace: sourceColorSpace)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .padding(6)
+        } else {
+            GeometryReader { geo in
+                let size = geo.size
+                ZStack {
+                    if let service = service, service.densityTexture != nil {
+                        ChromaticityMetalView(service: service)
+                    }
+                    UCSCanvasOverlay(
+                        size: size,
+                        sourceColorSpace: sourceColorSpace
+                    )
                 }
-                UCSCanvasOverlay(
-                    size: size,
-                    sourceColorSpace: sourceColorSpace
-                )
             }
+            .aspectRatio(UCSConstants.aspectRatio, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .padding(6)
         }
-        .aspectRatio(UCSConstants.aspectRatio, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
-        .padding(6)
     }
 }
 
