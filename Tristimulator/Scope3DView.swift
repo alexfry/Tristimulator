@@ -22,12 +22,13 @@
 //  or the backing scale changes.
 //
 //  Interaction (3D mode only; the SwiftUI Canvas overlays are hidden):
-//      drag          orbit (yaw / pitch)
-//      scroll/pinch  zoom
-//      double-click  reset view
+//      drag                      orbit (yaw / pitch)
+//      Option-drag / right-drag  pan (moves the orbit target in the screen plane)
+//      scroll/pinch              zoom
+//      double-click              reset view (orbit, zoom and pan)
 //  The scope's own move (title bar) and resize (corner) handles sit outside
-//  or above the Metal view, so a plain drag in the diagram area orbits and
-//  never moves the overlay; no modifier key is needed.
+//  or above the Metal view, so a drag in the diagram area orbits or pans and
+//  never moves the overlay.
 //
 
 import SwiftUI
@@ -479,10 +480,15 @@ final class Scope3DMTKView: MTKView {
     static let defaultYaw: Float = 0.6
     static let defaultPitch: Float = 0.45
     static let defaultDistance: Float = 3.6
+    static let fovY: Float = 35 * .pi / 180
+    /// Pan is limited to this distance from the origin so the scope can't be lost.
+    static let maxPan: Float = 3.0
 
     var yaw: Float = Scope3DMTKView.defaultYaw
     var pitch: Float = Scope3DMTKView.defaultPitch
     var distance: Float = Scope3DMTKView.defaultDistance
+    /// Orbit target (world space); moved by panning.
+    var target: SIMD3<Float> = .zero
     private var lastDragPoint: NSPoint?
 
     override var acceptsFirstResponder: Bool { true }
@@ -493,6 +499,7 @@ final class Scope3DMTKView: MTKView {
         yaw = Self.defaultYaw
         pitch = Self.defaultPitch
         distance = Self.defaultDistance
+        target = .zero
         setNeedsDisplay(bounds)
     }
 
@@ -501,26 +508,74 @@ final class Scope3DMTKView: MTKView {
             resetCamera()
             return
         }
+        beginDrag(event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        // Option is read per event, so it can be pressed or released mid-drag.
+        drag(event, pan: event.modifierFlags.contains(.option))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        endDrag()
+    }
+
+    // Right-drag pans too (no context menu on this view).
+    override func rightMouseDown(with event: NSEvent) { beginDrag(event) }
+    override func rightMouseDragged(with event: NSEvent) { drag(event, pan: true) }
+    override func rightMouseUp(with event: NSEvent) { endDrag() }
+
+    private func beginDrag(_ event: NSEvent) {
         lastDragPoint = convert(event.locationInWindow, from: nil)
-        // Continuous redraw while orbiting.
+        // Continuous redraw while dragging.
         enableSetNeedsDisplay = false
         isPaused = false
     }
 
-    override func mouseDragged(with event: NSEvent) {
+    private func drag(_ event: NSEvent, pan: Bool) {
         let pt = convert(event.locationInWindow, from: nil)
         guard let last = lastDragPoint else { lastDragPoint = pt; return }
         let dx = Float(pt.x - last.x), dy = Float(pt.y - last.y)
         lastDragPoint = pt
-        yaw -= dx * 0.01
-        pitch = min(max(pitch - dy * 0.01, -1.45), 1.45)
+        if pan {
+            self.pan(dx: dx, dy: dy)
+        } else {
+            yaw -= dx * 0.01
+            pitch = min(max(pitch - dy * 0.01, -1.45), 1.45)
+        }
     }
 
-    override func mouseUp(with event: NSEvent) {
+    private func endDrag() {
         lastDragPoint = nil
         isPaused = true
         enableSetNeedsDisplay = true
         setNeedsDisplay(bounds)
+    }
+
+    /// Moves the orbit target in the camera's screen plane so content at the
+    /// target's depth follows the cursor ~1:1 (dx, dy in view points, y up).
+    private func pan(dx: Float, dy: Float) {
+        let height = Float(max(bounds.height, 1))
+        let worldPerPoint = 2 * distance * tan(Self.fovY / 2) / height
+        let basis = cameraBasis()
+        var t = target - (basis.right * dx + basis.up * dy) * worldPerPoint
+        let len = simd_length(t)
+        if len > Self.maxPan { t *= Self.maxPan / len }
+        target = t
+    }
+
+    /// Eye offset from the target for the current yaw / pitch / distance.
+    private var eyeOffset: SIMD3<Float> {
+        SIMD3<Float>(distance * cos(pitch) * sin(yaw),
+                     distance * sin(pitch),
+                     distance * cos(pitch) * cos(yaw))
+    }
+
+    /// Camera right and up vectors in world space (matches lookAt).
+    private func cameraBasis() -> (right: SIMD3<Float>, up: SIMD3<Float>) {
+        let f = simd_normalize(-eyeOffset)
+        let r = simd_normalize(simd_cross(f, [0, 1, 0]))
+        return (r, simd_cross(r, f))
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -539,11 +594,8 @@ final class Scope3DMTKView: MTKView {
 
     /// Projection × view for the current orbit state.
     func viewProjection(aspect: Float) -> simd_float4x4 {
-        let eye = SIMD3<Float>(distance * cos(pitch) * sin(yaw),
-                               distance * sin(pitch),
-                               distance * cos(pitch) * cos(yaw))
-        return Scope3DMath.perspective(fovY: 35 * .pi / 180, aspect: aspect, near: 0.05, far: 50)
-            * Scope3DMath.lookAt(eye: eye, target: .zero, up: [0, 1, 0])
+        return Scope3DMath.perspective(fovY: Self.fovY, aspect: aspect, near: 0.05, far: 50)
+            * Scope3DMath.lookAt(eye: target + eyeOffset, target: target, up: [0, 1, 0])
     }
 }
 
@@ -762,6 +814,7 @@ struct Scope3DToggleButton: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled)
         .frame(width: 14, height: 12)
-        .help(is3D ? "Show 2D scope" : "Show 3D scope (drag to orbit, scroll to zoom, double-click to reset)")
+        .help(is3D ? "Show 2D scope (3D: drag to orbit, Option-drag or right-drag to pan, scroll to zoom, double-click to reset)"
+                   : "Show 3D scope (drag to orbit, Option-drag or right-drag to pan, scroll to zoom, double-click to reset)")
     }
 }
