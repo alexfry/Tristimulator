@@ -57,6 +57,11 @@ link_flags=$(ci_static_link_flags "${REPO_ROOT}/Generated/ThirdParty.generated.x
 printf 'OTHER_LDFLAGS = %s\n' "${link_flags}" >> "${xcconfig}"
 ci_log "Linking with the generated static library list."
 
+# ACES2CTLGoldenTests appends its per-transform error lines here (xcodebuild passes
+# TEST_RUNNER_* variables to the test process without the prefix). ci.yml prints it.
+export TEST_RUNNER_ACES2_GOLDEN_SUMMARY="${results}/aces2-ctl-golden.txt"
+rm -f "${TEST_RUNNER_ACES2_GOLDEN_SUMMARY}"
+
 run_xcodebuild test \
   -project Tristimulator.xcodeproj \
   -scheme Tristimulator \

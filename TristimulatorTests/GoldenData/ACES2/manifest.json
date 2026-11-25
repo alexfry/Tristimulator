@@ -1,0 +1,322 @@
+{
+  "format": "float32 little-endian, row-major [count][3] (RGB), no header",
+  "generator": "Scripts/generate_ctl_golden.py",
+  "seed": 20261125,
+  "sources": {
+    "aces": {
+      "url": "https://github.com/aces-aswf/aces",
+      "commit": "35e1e6ac2c26ec75433547d5d0a3a881f39bd9f5"
+    },
+    "aces-core": {
+      "url": "https://github.com/aces-aswf/aces-core",
+      "commit": "2d7af39344725aaa8ac3bf1746693c9a1d6c4792"
+    },
+    "aces-output": {
+      "url": "https://github.com/aces-aswf/aces-output",
+      "commit": "aab74723f76728c37345ed01e51ebb24fb1f2f1f"
+    },
+    "ctlrender": {
+      "url": "https://github.com/aces-aswf/CTL",
+      "commit": "294609eacc61687c9b8e7509608bbf6d4ca68344"
+    }
+  },
+  "inputs": {
+    "scene": {
+      "file": "input_scene_ap0.f32",
+      "count": 1803,
+      "encoding": "ACES2065-1 (AP0) linear",
+      "groups": {
+        "grey": 82,
+        "ap1_primary_secondary": 90,
+        "ap0_primary": 9,
+        "ap1_hue_sweep": 540,
+        "ap1_out_of_gamut": 54,
+        "large": 28,
+        "random": 1000
+      }
+    },
+    "display": {
+      "file": "input_display_cv.f32",
+      "count": 1485,
+      "encoding": "display code values",
+      "groups": {
+        "cube9": 729,
+        "grey_ramp": 256,
+        "random": 500
+      }
+    }
+  },
+  "transforms": [
+    {
+      "id": "fwd_sdr100_rec709_srgb",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/srgb/Output.Academy.Rec709-D65_100nit_in_Rec709-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "displayView",
+        "display": "sRGB - Display",
+        "view": "ACES 2.0 - SDR 100 nits (Rec.709)"
+      },
+      "file": "expected/fwd_sdr100_rec709_srgb.f32",
+      "count": 1803,
+      "ctl_sha256": "4370f064e6fdffd11c2610bba958bba7e212768d12b38e603a8f04aece94e3f3",
+      "non_finite": 0
+    },
+    {
+      "id": "fwd_sdr100_p3_srgb",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_100nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "displayView",
+        "display": "Display P3 - Display",
+        "view": "ACES 2.0 - SDR 100 nits (P3 D65)"
+      },
+      "file": "expected/fwd_sdr100_p3_srgb.f32",
+      "count": 1803,
+      "ctl_sha256": "2a567f6a226917b2fb1ccf2ed87f0f641ad4577c55c3a9d60b49032ee6e8325f",
+      "non_finite": 0
+    },
+    {
+      "id": "fwd_hdr1000_p3_srgb",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_1000nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "displayView",
+        "display": "Display P3 HDR - Display",
+        "view": "ACES 2.0 - HDR 1000 nits (P3 D65)"
+      },
+      "file": "expected/fwd_hdr1000_p3_srgb.f32",
+      "count": 1803,
+      "ctl_sha256": "af16e697c995abf6f553710a7baf0c99d5a7601852ec3c247987dd3c7cb402b8",
+      "non_finite": 0
+    },
+    {
+      "id": "fwd_hdr1000_p3_rec2100pq",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/rec2100/Output.Academy.P3-D65_1000nit_in_Rec2100-D65_ST2084.ctl",
+      "app": {
+        "path": "displayView",
+        "display": "Rec.2100-PQ - Display",
+        "view": "ACES 2.0 - HDR 1000 nits (P3 D65)"
+      },
+      "file": "expected/fwd_hdr1000_p3_rec2100pq.f32",
+      "count": 1803,
+      "ctl_sha256": "da3898d31965d480bf9b702454436b84327e6cbe04e1d497479b5fefc4e09b4a",
+      "non_finite": 0
+    },
+    {
+      "id": "dyn_p3_100",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_100nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "dynamicACES2",
+        "peakNits": 100,
+        "gamut": "p3d65"
+      },
+      "file": "expected/dyn_p3_100.f32",
+      "count": 1803,
+      "ctl_sha256": "2a567f6a226917b2fb1ccf2ed87f0f641ad4577c55c3a9d60b49032ee6e8325f",
+      "non_finite": 0
+    },
+    {
+      "id": "dyn_p3_400",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_1000nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "dynamicACES2",
+        "peakNits": 400,
+        "gamut": "p3d65"
+      },
+      "file": "expected/dyn_p3_400.f32",
+      "count": 1803,
+      "ctl_sha256": "af16e697c995abf6f553710a7baf0c99d5a7601852ec3c247987dd3c7cb402b8",
+      "non_finite": 0,
+      "derived": "d65/displayP3/Output.Academy.P3-D65_1000nit_in_P3-D65_sRGB-Piecewise.ctl with peakLuminance = 400"
+    },
+    {
+      "id": "dyn_p3_1000",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_1000nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "dynamicACES2",
+        "peakNits": 1000,
+        "gamut": "p3d65"
+      },
+      "file": "expected/dyn_p3_1000.f32",
+      "count": 1803,
+      "ctl_sha256": "af16e697c995abf6f553710a7baf0c99d5a7601852ec3c247987dd3c7cb402b8",
+      "non_finite": 0
+    },
+    {
+      "id": "dyn_p3_1600",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_1000nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "dynamicACES2",
+        "peakNits": 1600,
+        "gamut": "p3d65"
+      },
+      "file": "expected/dyn_p3_1600.f32",
+      "count": 1803,
+      "ctl_sha256": "af16e697c995abf6f553710a7baf0c99d5a7601852ec3c247987dd3c7cb402b8",
+      "non_finite": 0,
+      "derived": "d65/displayP3/Output.Academy.P3-D65_1000nit_in_P3-D65_sRGB-Piecewise.ctl with peakLuminance = 1600"
+    },
+    {
+      "id": "dyn_p3_4000",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_1000nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "dynamicACES2",
+        "peakNits": 4000,
+        "gamut": "p3d65"
+      },
+      "file": "expected/dyn_p3_4000.f32",
+      "count": 1803,
+      "ctl_sha256": "af16e697c995abf6f553710a7baf0c99d5a7601852ec3c247987dd3c7cb402b8",
+      "non_finite": 0,
+      "derived": "d65/displayP3/Output.Academy.P3-D65_1000nit_in_P3-D65_sRGB-Piecewise.ctl with peakLuminance = 4000"
+    },
+    {
+      "id": "dyn_rec709_100",
+      "kind": "forward",
+      "inputs": "scene",
+      "ctl": "d65/displayP3/Output.Academy.Rec709-D65_100nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "dynamicACES2",
+        "peakNits": 100,
+        "gamut": "rec709"
+      },
+      "file": "expected/dyn_rec709_100.f32",
+      "count": 1803,
+      "ctl_sha256": "7499fcf8cb2af386e15f39003c7e13dd690a1d457355676104988a9180304ddf",
+      "non_finite": 0
+    },
+    {
+      "id": "inv_sdr100_rec709_srgb",
+      "kind": "inverse",
+      "inputs": "display",
+      "ctl": "d65/srgb/InvOutput.Academy.Rec709-D65_100nit_in_Rec709-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "inverseDisplay",
+        "display": "sRGB - Display",
+        "view": "ACES 2.0 - SDR 100 nits (Rec.709)"
+      },
+      "file": "expected/inv_sdr100_rec709_srgb.f32",
+      "count": 1485,
+      "ctl_sha256": "3d7589d8307debb9d8005e25d0667dd2d10646749d47ea52dd31c1a9f59be242",
+      "non_finite": 0
+    },
+    {
+      "id": "inv_sdr100_p3_srgb",
+      "kind": "inverse",
+      "inputs": "display",
+      "ctl": "d65/displayP3/InvOutput.Academy.P3-D65_100nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "inverseDisplay",
+        "display": "Display P3 - Display",
+        "view": "ACES 2.0 - SDR 100 nits (P3 D65)"
+      },
+      "file": "expected/inv_sdr100_p3_srgb.f32",
+      "count": 1485,
+      "ctl_sha256": "233e0f5f784d0fc773574b9ad7c1d0013c5ceed28112eda43f7134a0b5512f2c",
+      "non_finite": 0
+    },
+    {
+      "id": "rt_sdr100_rec709_srgb",
+      "kind": "roundtrip",
+      "inputs": "display",
+      "of": "inv_sdr100_rec709_srgb",
+      "ctl": "d65/srgb/Output.Academy.Rec709-D65_100nit_in_Rec709-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "inverseThenDisplay",
+        "display": "sRGB - Display",
+        "view": "ACES 2.0 - SDR 100 nits (Rec.709)"
+      },
+      "file": "expected/rt_sdr100_rec709_srgb.f32",
+      "count": 1485,
+      "ctl_sha256": "4370f064e6fdffd11c2610bba958bba7e212768d12b38e603a8f04aece94e3f3",
+      "non_finite": 0
+    },
+    {
+      "id": "rt_sdr100_p3_srgb",
+      "kind": "roundtrip",
+      "inputs": "display",
+      "of": "inv_sdr100_p3_srgb",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_100nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "inverseThenDisplay",
+        "display": "Display P3 - Display",
+        "view": "ACES 2.0 - SDR 100 nits (P3 D65)"
+      },
+      "file": "expected/rt_sdr100_p3_srgb.f32",
+      "count": 1485,
+      "ctl_sha256": "2a567f6a226917b2fb1ccf2ed87f0f641ad4577c55c3a9d60b49032ee6e8325f",
+      "non_finite": 0
+    },
+    {
+      "id": "invdyn_rec709_to_p3_100",
+      "kind": "roundtrip",
+      "inputs": "display",
+      "of": "inv_sdr100_rec709_srgb",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_100nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "inverseThenDynamicACES2",
+        "display": "sRGB - Display",
+        "view": "ACES 2.0 - SDR 100 nits (Rec.709)",
+        "peakNits": 100,
+        "gamut": "p3d65"
+      },
+      "file": "expected/invdyn_rec709_to_p3_100.f32",
+      "count": 1485,
+      "ctl_sha256": "2a567f6a226917b2fb1ccf2ed87f0f641ad4577c55c3a9d60b49032ee6e8325f",
+      "non_finite": 0
+    },
+    {
+      "id": "invdyn_rec709_to_p3_1000",
+      "kind": "roundtrip",
+      "inputs": "display",
+      "of": "inv_sdr100_rec709_srgb",
+      "ctl": "d65/displayP3/Output.Academy.P3-D65_1000nit_in_P3-D65_sRGB-Piecewise.ctl",
+      "app": {
+        "path": "inverseThenDynamicACES2",
+        "display": "sRGB - Display",
+        "view": "ACES 2.0 - SDR 100 nits (Rec.709)",
+        "peakNits": 1000,
+        "gamut": "p3d65"
+      },
+      "file": "expected/invdyn_rec709_to_p3_1000.f32",
+      "count": 1485,
+      "ctl_sha256": "af16e697c995abf6f553710a7baf0c99d5a7601852ec3c247987dd3c7cb402b8",
+      "non_finite": 0
+    }
+  ],
+  "sha256": {
+    "expected/dyn_p3_100.f32": "add3e30954448795cc2cac3c849625a5993206e1f57961d66cee65fd70bcbc25",
+    "expected/dyn_p3_1000.f32": "17cee7eb877f878c19f5f69645273f07adc12d586e6eb42c5133477838f35136",
+    "expected/dyn_p3_1600.f32": "6ab79211fe9c8b5a3813a395f85d2c4988d3ac1740563535b8ccf9092e9a6588",
+    "expected/dyn_p3_400.f32": "9ad8606c3c5fe9d58b0fefbc7ebbb2e844dd3d559640bf5fc3b76ead83295fb4",
+    "expected/dyn_p3_4000.f32": "fa1ea7418f086142cabb68b89e7d8a06b2481b8af1a7f462a8cf7485335d28f0",
+    "expected/dyn_rec709_100.f32": "613942b1e0c927cefa893cb90f00b58eb10578b682a7c4282c8f34e0eeba0a97",
+    "expected/fwd_hdr1000_p3_rec2100pq.f32": "4d126b632c628202189a177fe1b5826c979be070d7e6b869d57cc9ef62b84102",
+    "expected/fwd_hdr1000_p3_srgb.f32": "17cee7eb877f878c19f5f69645273f07adc12d586e6eb42c5133477838f35136",
+    "expected/fwd_sdr100_p3_srgb.f32": "add3e30954448795cc2cac3c849625a5993206e1f57961d66cee65fd70bcbc25",
+    "expected/fwd_sdr100_rec709_srgb.f32": "3205a844b9f1cf5d06430ae4bcbfe6d8ad78f5376771f674c84b99ecf0f81f29",
+    "expected/inv_sdr100_p3_srgb.f32": "38f13b330440de21757a96e11b4ee5f20ba43ea13ea4e66b1658779f8d931064",
+    "expected/inv_sdr100_rec709_srgb.f32": "5bc7f23f883fcd45f3a61870a12dcc2f538bf2bee08aa3f05b3e8f1f6c856f8d",
+    "expected/invdyn_rec709_to_p3_100.f32": "5bc0025094b1a9f844477bb3636bc1be637aebec730e22d27bf4e008ba2a0a5c",
+    "expected/invdyn_rec709_to_p3_1000.f32": "2eea8f35b38c5752012ecb92334673f3bd1befe85dd09d95e44f9b444d76d121",
+    "expected/rt_sdr100_p3_srgb.f32": "82052495221ae0c824807601826a4de4717b4accec103ca5d89457beb89ee713",
+    "expected/rt_sdr100_rec709_srgb.f32": "6ccf517e267ab89a6c8de1b7be8489afa76ac580f111bc8a156dbdaa4bf4f913",
+    "input_display_cv.f32": "6b51d20e1ce8ba5c2842966edc318c07662b80f39164615b6309e773df44dc74",
+    "input_scene_ap0.f32": "4b98aaa1c8faaf2d4fc74848b19ab7d016408cee4c9b3a828cc6f083ae228dd2"
+  }
+}
