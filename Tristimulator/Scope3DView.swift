@@ -555,8 +555,9 @@ final class Scope3DMTKView: MTKView {
     /// Moves the orbit target in the camera's screen plane so content at the
     /// target's depth follows the cursor ~1:1 (dx, dy in view points, y up).
     private func pan(dx: Float, dy: Float) {
-        let height = Float(max(bounds.height, 1))
-        let worldPerPoint = 2 * distance * tan(Self.fovY / 2) / height
+        // The projection fits the field of view to the smaller dimension.
+        let fitSize = Float(max(min(bounds.width, bounds.height), 1))
+        let worldPerPoint = 2 * distance * tan(Self.fovY / 2) / fitSize
         let basis = cameraBasis()
         var t = target - (basis.right * dx + basis.up * dy) * worldPerPoint
         let len = simd_length(t)
@@ -593,8 +594,14 @@ final class Scope3DMTKView: MTKView {
     }
 
     /// Projection × view for the current orbit state.
+    /// `aspect` is the drawable's width / height. The field of view applies to
+    /// the smaller dimension, so the default view frames the whole scope in
+    /// landscape or portrait and a resize reveals more scene, never less.
+    /// Near/far (0.05 / 50) cover the furthest case (distance 10 + pan 3 +
+    /// scene radius ~1.6); geometry nearer than 0.05 is clipped per segment in
+    /// the line shader and culled in the label shader.
     func viewProjection(aspect: Float) -> simd_float4x4 {
-        return Scope3DMath.perspective(fovY: Self.fovY, aspect: aspect, near: 0.05, far: 50)
+        return Scope3DMath.perspectiveFit(fov: Self.fovY, aspect: aspect, near: 0.05, far: 50)
             * Scope3DMath.lookAt(eye: target + eyeOffset, target: target, up: [0, 1, 0])
     }
 }
@@ -697,7 +704,14 @@ final class Scope3DRenderer: NSObject, MTKViewDelegate {
             options: .storageModeShared) : nil
     }
 
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    /// Drawable width / height, kept in step with the view so the projection
+    /// always matches the window's aspect.
+    private var drawableAspect: Float = 1
+
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        drawableAspect = Float(size.width / max(size.height, 1))
+        view.setNeedsDisplay(view.bounds)
+    }
 
     func draw(in view: MTKView) {
         guard let commandQueue,
@@ -719,7 +733,8 @@ final class Scope3DRenderer: NSObject, MTKViewDelegate {
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else { return }
 
         let size = view.drawableSize
-        let aspect = Float(size.width / max(size.height, 1))
+        if size.width > 0, size.height > 0 { drawableAspect = Float(size.width / size.height) }
+        let aspect = drawableAspect
         let orbit = view as? Scope3DMTKView
         let viewProj = orbit?.viewProjection(aspect: aspect) ?? matrix_identity_float4x4
         // 64-byte camera uniform, updated every frame.
@@ -780,6 +795,16 @@ enum Scope3DMath {
             SIMD4<Float>(s.z, u.z, -f.z, 0),
             SIMD4<Float>(-simd_dot(s, eye), -simd_dot(u, eye), simd_dot(f, eye), 1)
         ))
+    }
+
+    /// Like `perspective`, but `fov` applies to the smaller of width and height
+    /// (vertical in landscape, horizontal in portrait).
+    static func perspectiveFit(fov: Float, aspect: Float, near: Float, far: Float) -> simd_float4x4 {
+        let a = max(aspect, 1e-3)
+        guard a < 1 else { return perspective(fovY: fov, aspect: a, near: near, far: far) }
+        // Portrait: widen the vertical fov so the horizontal fov equals `fov`.
+        let fovY = 2 * atan(tan(fov * 0.5) / a)
+        return perspective(fovY: fovY, aspect: a, near: near, far: far)
     }
 
     /// Right-handed perspective projection with Metal's [0, 1] clip depth.

@@ -115,22 +115,26 @@ struct UCSDiagramView: View {
     let sourceColorSpace: String
 
     var body: some View {
-        GeometryReader { geo in
-            let size = geo.size
-            if let service, service.is3D {
-                // 3D point cloud; markers are drawn in Metal, Canvas overlays hidden.
-                Scope3DView(
-                    device: service.device,
-                    pointBuffer: service.pointBuffer,
-                    pointCount: service.pointCount,
-                    pointsVersion: service.pointsVersion,
-                    spec: Scope3DMarkerSpec(
-                        kind: .chromaticity(.uv,
-                                            stopsMin: ChromaticityScopeService.stopsMin3D,
-                                            stopsMax: ChromaticityScopeService.stopsMax3D),
-                        sourceColorSpace: sourceColorSpace)
-                )
-            } else {
+        if let service, service.is3D {
+            // 3D point cloud; markers are drawn in Metal, Canvas overlays hidden.
+            // Fills the whole content area under the title bar (no 2D aspect
+            // frame); the projection follows the view's actual aspect.
+            Scope3DView(
+                device: service.device,
+                pointBuffer: service.pointBuffer,
+                pointCount: service.pointCount,
+                pointsVersion: service.pointsVersion,
+                spec: Scope3DMarkerSpec(
+                    kind: .chromaticity(.uv,
+                                        stopsMin: ChromaticityScopeService.stopsMin3D,
+                                        stopsMax: ChromaticityScopeService.stopsMax3D),
+                    sourceColorSpace: sourceColorSpace)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .padding(6)
+        } else {
+            GeometryReader { geo in
+                let size = geo.size
                 ZStack {
                     if let service = service, service.densityTexture != nil {
                         ChromaticityMetalView(service: service)
@@ -141,10 +145,10 @@ struct UCSDiagramView: View {
                     )
                 }
             }
+            .aspectRatio(UCSConstants.aspectRatio, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .padding(6)
         }
-        .aspectRatio(UCSConstants.aspectRatio, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
-        .padding(6)
     }
 }
 

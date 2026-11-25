@@ -82,6 +82,17 @@ vertex Scope3DColorOut scope3DLineVertex(
     Scope3DLine l = lines[iid];
     float4 ca = mvp * float4(l.a.xyz, 1.0);
     float4 cb = mvp * float4(l.b.xyz, 1.0);
+
+    // Clip the segment against the near plane (Metal clip z >= 0) so a segment
+    // passing behind the camera (zoomed/panned into the scene) doesn't flip.
+    if (ca.z < 0.0 && cb.z < 0.0) {
+        Scope3DColorOut culled;
+        culled.position = float4(0.0, 0.0, -1.0, 1.0);   // outside the clip volume
+        culled.color = float4(0.0);
+        return culled;
+    }
+    if (ca.z < 0.0) ca = mix(ca, cb, ca.z / (ca.z - cb.z));
+    if (cb.z < 0.0) cb = mix(cb, ca, cb.z / (cb.z - ca.z));
     float wa = max(ca.w, 1e-4);
     float wb = max(cb.w, 1e-4);
     float2 halfVP = 0.5 * u.viewportSize;
@@ -139,6 +150,14 @@ vertex Scope3DLabelOut scope3DLabelVertex(
     Scope3DLabel l = labels[iid];
     float2 corner = float2(float(vid & 1u), float(vid >> 1u));   // (0,0) BL … (1,1) TR
     float4 c = mvp * float4(l.anchor.xyz, 1.0);
+    if (c.z < 0.0) {
+        // Anchor in front of the near plane / behind the camera: cull.
+        Scope3DLabelOut culled;
+        culled.position = float4(0.0, 0.0, -1.0, 1.0);
+        culled.color = float4(0.0);
+        culled.uv = float2(0.0);
+        return culled;
+    }
     float2 px = l.sizeOffset.zw + corner * l.sizeOffset.xy;
     c.xy += px / (0.5 * u.viewportSize) * c.w;
 
