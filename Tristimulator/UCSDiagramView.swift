@@ -61,6 +61,7 @@ struct UCSOverlayView: View {
                 Scope3DToggleButton(is3D: service?.is3D ?? false, isEnabled: service != nil) {
                     guard let service else { return }
                     service.is3D.toggle()
+                    ScopeViewDefaults.setIs3D(service.is3D, for: .uv)
                     onModeChanged?()
                 }
             }
@@ -121,6 +122,7 @@ struct UCSDiagramView: View {
             // frame); the projection follows the view's actual aspect.
             Scope3DView(
                 device: service.device,
+                cameraKind: .uv,
                 pointBuffer: service.pointBuffer,
                 pointCount: service.pointCount,
                 pointsVersion: service.pointsVersion,

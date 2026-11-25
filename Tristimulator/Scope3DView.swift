@@ -26,6 +26,9 @@
 //      Option-drag / right-drag  pan (moves the orbit target in the screen plane)
 //      scroll/pinch              zoom
 //      double-click              reset view (orbit, zoom and pan)
+//  The camera is saved per scope in UserDefaults (ScopeViewDefaults) when a
+//  drag ends, shortly after zooming stops, and on reset; it is restored
+//  whenever the 3D view is created (launch, scope reopen, 2D → 3D).
 //  The scope's own move (title bar) and resize (corner) handles sit outside
 //  or above the Metal view, so a drag in the diagram area orbits or pans and
 //  never moves the overlay.
@@ -428,6 +431,8 @@ private enum Scope3DLabelAtlas {
 /// when a scope is in 3D mode.
 struct Scope3DView: NSViewRepresentable {
     let device: MTLDevice
+    /// Which scope's saved camera to restore and update.
+    let cameraKind: ScopeKind
     let pointBuffer: MTLBuffer?
     let pointCount: Int
     let pointsVersion: UInt
@@ -435,6 +440,9 @@ struct Scope3DView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> Scope3DMTKView {
         let view = Scope3DMTKView()
+        view.camera = ScopeViewDefaults.camera(cameraKind)
+        let kind = cameraKind
+        view.onCameraCommit = { ScopeViewDefaults.setCamera($0, for: kind) }
         view.device = device
         view.delegate = context.coordinator
         view.enableSetNeedsDisplay = true
@@ -477,30 +485,49 @@ struct Scope3DView: NSViewRepresentable {
 /// MTKView with orbit-camera mouse handling. Redraws continuously while a drag
 /// is in progress and on demand otherwise.
 final class Scope3DMTKView: MTKView {
-    static let defaultYaw: Float = 0.6
-    static let defaultPitch: Float = 0.45
-    static let defaultDistance: Float = 3.6
+    static let defaultDistance: Float = Scope3DCamera.default.distance
     static let fovY: Float = 35 * .pi / 180
     /// Pan is limited to this distance from the origin so the scope can't be lost.
-    static let maxPan: Float = 3.0
+    static let maxPan: Float = Scope3DCamera.maxPan
 
-    var yaw: Float = Scope3DMTKView.defaultYaw
-    var pitch: Float = Scope3DMTKView.defaultPitch
-    var distance: Float = Scope3DMTKView.defaultDistance
+    var yaw: Float = Scope3DCamera.default.yaw
+    var pitch: Float = Scope3DCamera.default.pitch
+    var distance: Float = Scope3DCamera.default.distance
     /// Orbit target (world space); moved by panning.
     var target: SIMD3<Float> = .zero
     private var lastDragPoint: NSPoint?
+
+    /// Called with the camera when an interaction finishes (drag end, zoom
+    /// settle, reset) so it can be saved. Not called per frame.
+    var onCameraCommit: ((Scope3DCamera) -> Void)?
+    private var zoomCommitWork: DispatchWorkItem?
+
+    /// Current orbit state; setting it clamps and redraws.
+    var camera: Scope3DCamera {
+        get { Scope3DCamera(yaw: yaw, pitch: pitch, distance: distance, target: target) }
+        set {
+            let c = newValue.clamped
+            yaw = c.yaw
+            pitch = c.pitch
+            distance = c.distance
+            target = c.target
+            setNeedsDisplay(bounds)
+        }
+    }
+
+    private func commitCamera() {
+        zoomCommitWork?.cancel()
+        zoomCommitWork = nil
+        onCameraCommit?(camera)
+    }
 
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
 
     func resetCamera() {
-        yaw = Self.defaultYaw
-        pitch = Self.defaultPitch
-        distance = Self.defaultDistance
-        target = .zero
-        setNeedsDisplay(bounds)
+        camera = .default
+        commitCamera()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -546,10 +573,12 @@ final class Scope3DMTKView: MTKView {
     }
 
     private func endDrag() {
+        let dragged = lastDragPoint != nil
         lastDragPoint = nil
         isPaused = true
         enableSetNeedsDisplay = true
         setNeedsDisplay(bounds)
+        if dragged { commitCamera() }
     }
 
     /// Moves the orbit target in the camera's screen plane so content at the
@@ -589,8 +618,20 @@ final class Scope3DMTKView: MTKView {
     }
 
     private func zoom(by factor: Float) {
-        distance = min(max(distance * factor, 2.0), 10.0)
+        distance = min(max(distance * factor, Scope3DCamera.distanceRange.lowerBound),
+                       Scope3DCamera.distanceRange.upperBound)
         setNeedsDisplay(bounds)
+        // Scroll wheels have no end event, so save once zooming has settled.
+        zoomCommitWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.commitCamera() }
+        zoomCommitWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        // Leaving the window (scope closed / switched to 2D) mid-zoom: save now.
+        if newWindow == nil, zoomCommitWork != nil { commitCamera() }
+        super.viewWillMove(toWindow: newWindow)
     }
 
     /// Projection × view for the current orbit state.

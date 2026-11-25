@@ -309,6 +309,23 @@ enum TristimulatorDefaults {
     /// display's SDR view instead of converting from the display colour space.
     /// Missing or false (default) keeps Color Space mode.
     static let inverseDisplayForDisplayReferred = "InverseDisplayForDisplayReferred"
+
+    // Scope view state (app-wide; see ScopeViewState.swift). Per-image scope
+    // visibility / placement are saved with the OCIO settings instead.
+
+    /// Bool: scope shows its 3D view. Missing or false = 2D.
+    /// "ScopeIs3DYxy", "ScopeIs3DUv", "ScopeIs3DJmh".
+    static func scopeIs3D(_ kind: ScopeKind) -> String { "ScopeIs3D" + kind.defaultsSuffix }
+    /// Data (JSON `Scope3DCamera`): 3D yaw, pitch, zoom distance and pan target.
+    /// "Scope3DCameraYxy", "Scope3DCameraUv", "Scope3DCameraJmh".
+    static func scope3DCamera(_ kind: ScopeKind) -> String { "Scope3DCamera" + kind.defaultsSuffix }
+    /// Float: JMh scope M range (slider, 5…200, default 100).
+    static let scopeJmhMaxM = "ScopeJmhMaxM"
+}
+
+private extension ScopeKind {
+    /// Capitalised raw value for defaults keys (no dots, so @AppStorage/KVO work).
+    var defaultsSuffix: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
 }
 
 enum TristimulatorHelpBook {

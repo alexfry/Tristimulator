@@ -98,6 +98,9 @@ final class JmhScopeService {
         self.commandQueue = queue
         setupPipelines()
         setupBuffers()
+        // Start in the saved app-wide 2D/3D mode and M range.
+        is3D = ScopeViewDefaults.is3D(.jmh)
+        maxM = ScopeViewDefaults.jmhMaxM()
     }
 
     // MARK: - Public API

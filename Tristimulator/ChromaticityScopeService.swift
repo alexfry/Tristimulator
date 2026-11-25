@@ -109,6 +109,8 @@ final class ChromaticityScopeService {
         self.commandQueue = queue
         setupPipelines()
         setupBuffers()
+        // Start in the saved app-wide 2D/3D mode.
+        is3D = ScopeViewDefaults.is3D(mode == .yxy ? .yxy : .uv)
     }
 
     // MARK: - Public API

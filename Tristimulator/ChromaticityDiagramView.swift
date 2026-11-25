@@ -65,6 +65,7 @@ struct ChromaticityOverlayView: View {
                 Scope3DToggleButton(is3D: service?.is3D ?? false, isEnabled: service != nil) {
                     guard let service else { return }
                     service.is3D.toggle()
+                    ScopeViewDefaults.setIs3D(service.is3D, for: .yxy)
                     onModeChanged?()
                 }
             }
@@ -125,6 +126,7 @@ struct ChromaticityDiagramView: View {
             // frame); the projection follows the view's actual aspect.
             Scope3DView(
                 device: service.device,
+                cameraKind: .yxy,
                 pointBuffer: service.pointBuffer,
                 pointCount: service.pointCount,
                 pointsVersion: service.pointsVersion,

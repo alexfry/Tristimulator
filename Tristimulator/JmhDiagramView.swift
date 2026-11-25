@@ -36,7 +36,8 @@ struct JmhOverlayView: View {
     private var shown: ScopeOverlayPlacement {
         placement.effective(in: containerSize, minSize: minSize, maxSize: maxSize)
     }
-    @State private var maxM: Float = 100.0
+    /// Starts from the saved app-wide M range so it survives closing the scope and relaunching.
+    @State private var maxM: Float = ScopeViewDefaults.jmhMaxM()
     @State private var isHovering = false
 
     private let minSize = CGSize(width: 200, height: 230)
@@ -67,6 +68,7 @@ struct JmhOverlayView: View {
                 Scope3DToggleButton(is3D: service?.is3D ?? false, isEnabled: service != nil) {
                     guard let service else { return }
                     service.is3D.toggle()
+                    ScopeViewDefaults.setIs3D(service.is3D, for: .jmh)
                     onModeChanged?()
                 }
             }
@@ -93,6 +95,7 @@ struct JmhOverlayView: View {
                     .controlSize(.mini)
                     .onChange(of: maxM) {
                         service?.maxM = maxM
+                        ScopeViewDefaults.setJmhMaxM(maxM)
                         onMaxMChanged?()
                     }
                 Text("\(Int(maxM))")
@@ -116,6 +119,14 @@ struct JmhOverlayView: View {
                             scaling: scaleWithWindow, minSize: minSize, maxSize: maxSize)
         .onHover { hovering in
             isHovering = hovering
+        }
+        // An existing service may hold an M range set before this overlay
+        // (re)opened, e.g. from another window; follow the saved slider value.
+        .onAppear {
+            if let service, service.maxM != maxM {
+                service.maxM = maxM
+                onMaxMChanged?()
+            }
         }
         .compatGlass(in: .rect(cornerRadius: 12))
         .background(ScopeMouseDownObserver(onMouseDown: onMouseDown))
@@ -152,6 +163,7 @@ struct JmhDiagramView: View {
             // frame); the projection follows the view's actual aspect.
             Scope3DView(
                 device: service.device,
+                cameraKind: .jmh,
                 pointBuffer: service.pointBuffer,
                 pointCount: service.pointCount,
                 pointsVersion: service.pointsVersion,
