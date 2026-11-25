@@ -44,12 +44,79 @@ extension NSWindow {
         styleMask.contains(.fullScreen) ? nil : WindowFrame(frame)
     }
 
-    /// Applies a saved per-image frame, clamped to the visible screens.
-    /// Does nothing in full screen or when the frame is unusable.
-    func restore(savedFrame: WindowFrame) {
+    /// Applies a saved per-image frame, clamped to the visible screens, with no
+    /// animation. Does nothing in full screen or when the frame is unusable.
+    /// Returns the frame applied (or already in place), nil when skipped.
+    @discardableResult
+    func restore(savedFrame: WindowFrame, display: Bool = true) -> NSRect? {
         guard !styleMask.contains(.fullScreen),
-              let target = savedFrame.clamped(toVisibleFrames: NSScreen.screens.map(\.visibleFrame)),
-              target != frame else { return }
-        setFrame(target, display: true)
+              let target = savedFrame.clamped(toVisibleFrames: NSScreen.screens.map(\.visibleFrame))
+        else { return nil }
+        if target != frame {
+            setFrame(target, display: display, animate: false)
+        }
+        return target
+    }
+}
+
+/// Invisible view behind each document's content that hands back its window
+/// the moment it is added to one. For a newly opened document that happens
+/// while SwiftUI is still building the window, before it is ordered on
+/// screen, so the image's saved frame can be applied before the first frame
+/// is drawn instead of snapping the window to size later.
+final class WindowAttachView: NSView {
+    /// Called once, synchronously, with the first window this view joins.
+    var onAttach: ((NSWindow) -> Void)?
+    /// Saved frame for the window being opened; read when the view attaches.
+    var initialFrame: (() -> WindowFrame?)?
+    /// Called once the saved frame has been applied to the window.
+    var onInitialFrameApplied: (() -> Void)?
+
+    private var attached = false
+    private var holdObservers: [NSObjectProtocol] = []
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard !attached, let window else { return }
+        attached = true
+        onAttach?(window)
+        guard let saved = initialFrame?(),
+              let target = window.restore(savedFrame: saved, display: false) else { return }
+        onInitialFrameApplied?()
+        if !window.isVisible {
+            holdFrameUntilShown(window, target: target)
+        }
+    }
+
+    /// AppKit/SwiftUI may still cascade or size the window between now and it
+    /// going on screen; put the saved frame back on any such change (still
+    /// before display) until the window is shown, then stop.
+    private func holdFrameUntilShown(_ window: NSWindow, target: NSRect) {
+        let center = NotificationCenter.default
+        let revert: (Notification) -> Void = { [weak window] _ in
+            guard let window, !window.inLiveResize,
+                  !window.styleMask.contains(.fullScreen),
+                  window.frame != target else { return }
+            window.setFrame(target, display: false, animate: false)
+        }
+        holdObservers = [NSWindow.didMoveNotification, NSWindow.didResizeNotification].map {
+            center.addObserver(forName: $0, object: window, queue: nil, using: revert)
+        }
+        // Stop one run-loop turn after the window is shown (occlusion state
+        // changes when it goes on screen), with a short cap in case it never is.
+        holdObservers.append(center.addObserver(forName: NSWindow.didChangeOcclusionStateNotification,
+                                                object: window, queue: nil) { [weak self, weak window] _ in
+            guard window?.isVisible == true else { return }
+            DispatchQueue.main.async { self?.stopHolding() }
+        })
+        let tokens = holdObservers
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            tokens.forEach { center.removeObserver($0) }
+        }
+    }
+
+    private func stopHolding() {
+        holdObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        holdObservers.removeAll()
     }
 }

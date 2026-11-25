@@ -350,6 +350,22 @@ final class OCIOSettingsStore {
         return value
     }
 
+    /// The saved main window frame a window about to open for `fileURL` should
+    /// start with, looked up the same way `initializePipeline` finds settings:
+    /// an extra window's own bucket first (including one staged for a window
+    /// that hasn't claimed its ID yet), then the per-file bucket.
+    func initialWindowFrame(fileURL: URL?, windowID: String, isExtraWindow: Bool) -> WindowFrame? {
+        var extraID: String? = isExtraWindow ? windowID : nil
+        if extraID == nil, let pending = pendingExtraWindow,
+           pending.filePath == fileURL?.path {
+            extraID = pending.windowID
+        }
+        if let extraID, let frame = settings(forWindow: extraID)?.windowFrame {
+            return frame
+        }
+        return fileURL.flatMap { settings(for: $0) }?.windowFrame
+    }
+
     // MARK: - Per-window API
 
     /// Return the saved pipeline settings for a specific window, or `nil` if unknown.

@@ -20,6 +20,9 @@ struct DocumentContentView: View {
     @State private var windowFrame: WindowFrame? = nil
     /// Saved frame waiting for `hostWindow` to be known (settings can load first).
     @State private var pendingWindowFrame: WindowFrame? = nil
+    /// Set when the saved frame was applied as the window was created (before
+    /// it was shown), so the later settings restore leaves the frame alone.
+    @State private var initialFrameState = InitialWindowFrameState()
     /// Triggers a one-shot peak measurement in the Metal view on the next frame.
     @State private var measurePeak = false
     /// Guards against auto-saving while we are programmatically restoring settings.
@@ -83,7 +86,15 @@ struct DocumentContentView: View {
     /// Layer 1: core chrome, appear/disappear, image-load, and EDR-popover onChanges.
     private var baseConfiguredView: some View {
         contentView
-            .background(WindowConfigurator(window: $hostWindow))
+            .background(WindowConfigurator(
+                window: $hostWindow,
+                initialFrame: { [document, fileURL] in
+                    OCIOSettingsStore.shared.initialWindowFrame(
+                        fileURL: document.fileURL ?? fileURL,
+                        windowID: document.windowID,
+                        isExtraWindow: document.isExtraWindow)
+                },
+                onInitialFrameApplied: { [initialFrameState] in initialFrameState.applied = true }))
             // Suppress the toolbar's own background so the vibrancy over image
             // content is all that shows — works in both windowed and full-screen
             // (full-screen uses a separate NSToolbarFullScreenWindow that
@@ -1216,7 +1227,10 @@ struct DocumentContentView: View {
                 globallyEnabled: saved.amfLooksGloballyEnabled)
             // Scope overlays and the window frame are independent of the OCIO config too.
             restoreScopeLayout(saved.scopeLayout)
-            restoreWindowFrame(saved.windowFrame)
+            // Normally already applied before the window was shown.
+            if !initialFrameState.applied {
+                restoreWindowFrame(saved.windowFrame)
+            }
         }
 
         if let saved = saved, let fileURL = document.fileURL {
@@ -2187,11 +2201,19 @@ struct DocumentContentView: View {
 /// `.toolbarBackground(.hidden, for: .windowToolbar)` SwiftUI modifier on the
 /// parent view, which reaches both the windowed NSWindow and the separate
 /// NSToolbarFullScreenWindow used in full-screen mode.
+///
+/// It also applies the image's saved window frame as soon as the view joins
+/// its window, before the window is first shown (see `WindowAttachView`).
 private struct WindowConfigurator: NSViewRepresentable {
     @Binding var window: NSWindow?
+    var initialFrame: () -> WindowFrame? = { nil }
+    var onInitialFrameApplied: () -> Void = {}
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
+        let view = WindowAttachView()
+        view.onAttach = { Self.configure($0) }
+        view.initialFrame = initialFrame
+        view.onInitialFrameApplied = onInitialFrameApplied
         DispatchQueue.main.async {
             Self.configure(view.window)
             window = view.window
@@ -2218,6 +2240,12 @@ private struct WindowConfigurator: NSViewRepresentable {
             window.styleMask.insert(.fullSizeContentView)
         }
     }
+}
+
+/// Reference box so the window-attach callback can flag the early frame
+/// restore without a SwiftUI state write during view construction.
+private final class InitialWindowFrameState {
+    var applied = false
 }
 
 #Preview {

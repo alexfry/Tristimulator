@@ -48,6 +48,18 @@ struct WindowFrameRestoreTests {
         #expect(WindowFrame(NSRect(x: 10, y: 10, width: 500, height: 500)).clamped(toVisibleFrames: []) == nil)
     }
 
+    @MainActor @Test func restoreAppliesFrameToUnshownWindowWithoutDisplay() throws {
+        let visible = try #require(NSScreen.main?.visibleFrame)
+        let window = NSWindow(contentRect: NSRect(x: visible.minX, y: visible.minY, width: 300, height: 200),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        let saved = WindowFrame(NSRect(x: visible.minX + 20, y: visible.minY + 30, width: 640, height: 400))
+        let applied = window.restore(savedFrame: saved, display: false)
+        #expect(applied == saved.nsRect)
+        #expect(window.frame == saved.nsRect)
+        #expect(!window.isVisible)
+    }
+
     @Test func windowFrameRoundTripsInSettings() throws {
         let frame = WindowFrame(NSRect(x: 40, y: 60, width: 1100, height: 720))
         let s = OCIOPipelineSettings(sourceSpace: "ACEScg", windowFrame: frame)
