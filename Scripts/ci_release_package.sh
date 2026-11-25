@@ -178,6 +178,7 @@ EOF
 link_flags=$(ci_static_link_flags "${REPO_ROOT}/Generated/ThirdParty.generated.xcconfig")
 printf 'OTHER_LDFLAGS = %s\n' "${link_flags}" >> "${xcconfig}"
 ci_log "Linking with the generated static library list."
+ci_icon_compat_xcconfig "${xcconfig}"
 if [[ -n "${marketing}" ]]; then
   printf 'MARKETING_VERSION = %s\n' "${marketing}" >> "${xcconfig}"
 fi

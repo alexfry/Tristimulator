@@ -52,6 +52,22 @@ ci_static_link_flags() {
   printf '%s\n' "${line}"
 }
 
+# Xcode <27 cannot compile .icon assets (Xcode 27 format). Append xcconfig
+# overrides that exclude .icon bundles and fall back to AppIcon.appiconset.
+ci_icon_compat_xcconfig() {
+  local xcconfig="$1"
+  local major
+  major=$(xcodebuild -version | head -1 | sed 's/Xcode //' | cut -d. -f1)
+  if [[ "${major}" -lt 27 ]]; then
+    ci_log "Xcode ${major} detected — falling back to legacy AppIcon.appiconset."
+    cat >> "${xcconfig}" <<'COMPAT'
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO
+EXCLUDED_SOURCE_FILE_NAMES = $(inherited) *.icon
+COMPAT
+  fi
+}
+
 # xcbeautify is on the GitHub macOS image. pipefail in the caller preserves
 # xcodebuild's status when the log is piped.
 run_xcodebuild() {
