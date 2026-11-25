@@ -80,6 +80,17 @@ jobs:
       - name: Test
         run: Scripts/ci_xcode_test.sh
 
+      - name: ACES 2.0 CTL golden summary
+        if: always()
+        run: |
+          f="${RUNNER_TEMP}/TestResults/aces2-ctl-golden.txt"
+          if [[ -s "$f" ]]; then
+            sort "$f"
+            { echo "### ACES 2.0 CTL golden tests"; echo; echo '```'; sort "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No ACES 2.0 CTL golden summary was written."
+          fi
+
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4
