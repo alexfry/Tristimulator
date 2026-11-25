@@ -6,12 +6,12 @@ GitHub Actions builds Tristimulator on a hosted Apple Silicon Mac. The build and
 
 | Workflow | When it runs | What it does |
 | --- | --- | --- |
-| CI (`.github/workflows/ci.yml`) | Pull requests, pushes to `main`, and **Run workflow** | vcpkg install, then `xcodebuild test` for the `Tristimulator` scheme |
+| CI (`.github/workflows/ci.yml`) | **Run workflow** only (manual) | vcpkg install, then `xcodebuild test` for the `Tristimulator` scheme |
 | Release (`.github/workflows/release.yml`) | Push a tag such as `v1.2.3`, or **Run workflow** with that tag | Release archive, Developer ID sign, notarize, and staple a DMG, then upload it and attach it to a **draft** GitHub Release. If stapling fails, the notarized DMG is still attached to a draft marked unstapled and the job fails |
 
-CI does not run on pushes to other branches. A pull request from one of those branches still runs CI.
+CI is manual-only to avoid paying for macOS runner minutes on every push. Pull requests are checked with local builds; start CI from the Actions tab with **Run workflow** when you want a hosted check. Release builds still run from `release.yml`.
 
-Doc-only changes do not start CI: `*.md`, `docs/`, `LICENSE`, `ThirdPartyNotices/`, and `.gitignore`. A new commit on the same pull request or on `main` cancels the older run.
+A new manual run on the same ref cancels the older one.
 
 ## Runner and Xcode
 

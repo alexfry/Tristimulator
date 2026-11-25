@@ -2,24 +2,10 @@
 # Signing secrets are not read here. See docs/CI.md.
 name: CI
 
+# Manual only, to avoid paying for macOS runner minutes on every push.
+# PRs are checked with local builds; release builds run from release.yml.
 on:
   workflow_dispatch:
-  pull_request:
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "LICENSE"
-      - "ThirdPartyNotices/**"
-      - ".gitignore"
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "LICENSE"
-      - "ThirdPartyNotices/**"
-      - ".gitignore"
 
 # Cancel a run that a newer commit on the same PR or on main has replaced.
 concurrency:
