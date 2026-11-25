@@ -9,6 +9,7 @@
 #include <OpenColorIO/OpenColorIO.h>
 #include <vector>
 #include <string>
+#include <cstring>
 #include <unistd.h>
 
 namespace OCIO = OCIO_NAMESPACE;
@@ -204,6 +205,55 @@ static NSErrorDomain const OCIOErrorDomain = @"com.tristimulator.ocio";
     
     const char* view = _config->getDefaultView([display UTF8String]);
     return view ? @(view) : @"";
+}
+
+- (nullable NSString *)displayColorSpaceForDisplay:(NSString *)display view:(NSString *)view {
+    if (!_config) return nil;
+
+    try {
+        const char* cs = _config->getDisplayViewColorSpaceName([display UTF8String], [view UTF8String]);
+        if (!cs || !*cs) return nil;
+        if (strcmp(cs, OCIO::OCIO_VIEW_USE_DISPLAY_NAME) == 0) return display;
+        return @(cs);
+    } catch (...) {
+        return nil;
+    }
+}
+
+- (NSString *)viewTransformForDisplay:(NSString *)display view:(NSString *)view {
+    if (!_config) return @"";
+
+    try {
+        const char* vt = _config->getDisplayViewTransformName([display UTF8String], [view UTF8String]);
+        return vt ? @(vt) : @"";
+    } catch (...) {
+        return @"";
+    }
+}
+
+- (BOOL)isDisplayReferredColorSpace:(NSString *)colorSpaceName {
+    if (!_config) return NO;
+
+    try {
+        OCIO::ConstColorSpaceRcPtr cs = _config->getColorSpace([colorSpaceName UTF8String]);
+        return cs && cs->getReferenceSpaceType() == OCIO::REFERENCE_SPACE_DISPLAY;
+    } catch (...) {
+        return NO;
+    }
+}
+
+- (NSString *)encodingForColorSpace:(NSString *)colorSpaceName {
+    if (!_config) return @"";
+
+    try {
+        OCIO::ConstColorSpaceRcPtr cs = _config->getColorSpace([colorSpaceName UTF8String]);
+        if (cs) {
+            const char* enc = cs->getEncoding();
+            if (enc) return @(enc);
+        }
+    } catch (...) {
+    }
+    return @"";
 }
 
 - (NSString *)colorSpaceForRole:(NSString *)role {
