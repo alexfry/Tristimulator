@@ -22,9 +22,23 @@
 - ACES Metadata File (AMF) support. A matching `.amf` next to the image is found automatically, or you can load one yourself.
 - Shows extended dynamic range on displays that support it. The toolbar reports HDR or SDR for the current display, with EDR details and a peak measurement of the image on screen.
 - Exposure from -10 to +10 stops, and single-channel views for red, green, blue, alpha and luminance.
-- CIE 1931 Yxy, CIE 1976 u'v' and JMh chromaticity diagrams drawn over the image.
+- CIE 1931 Yxy, CIE 1976 u'v' and JMh chromaticity diagrams drawn over the image, each in 2D or 3D. The 3D scopes plot every pixel as a point cloud, with luminance in stops for Yxy and u'v' and J for JMh. Drag to orbit, Option-drag or right-drag to pan, scroll to zoom and double-click to reset the view. Scope windows can be moved and resized, and the 3D view fills the scope's shape.
+- Scope layout, 2D/3D mode, the 3D camera and the JMh M range are remembered between launches.
+- Each image remembers its window size and position, and reopens where you left it.
+- Optionally opens display-referred images in Inverse Display mode. A newly opened image tagged with an SDR display colour space, such as sRGB - Display or Display P3 - Display, starts by inverting that display's SDR view (ACES 2.0 SDR 100 nits where available). Turn it on in Settings > OCIO > Display-Referred Images.
 - Copy or export an image with its OpenColorIO processing as an HDR gain-map HEIC or JPEG, with an UltraHDR option for JPEG.
 - A Quick Look extension that previews OpenEXR files in the Finder, with Dynamic ACES 2.0 rendering following availible EDR headroom..
+
+<p align="center">
+  <img src="docs/images/scopes-3d.png" alt="Tristimulator showing an EXR of a prism with 3D CIE 1931 Yxy, CIE 1976 u'v' and JMh scopes over the image" width="720">
+</p>
+
+## What's new in 0.1.1
+
+- 3D Yxy, u'v' and JMh scopes, with orbit, pan, zoom and reset.
+- Scope settings and each image's window size and position are restored.
+- Optional inverse display transform for display-referred images.
+- Fixed a crash after waking the Mac with Dynamic ACES 2 auto-nits on, caused by overlapping OCIO GPU pipeline compiles.
 
 The help book in `Help/Tristimulator.help` lists the supported file types and keyboard shortcuts.
 
